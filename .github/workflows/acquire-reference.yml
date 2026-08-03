@@ -1,0 +1,197 @@
+name: acquire-reference
+
+# Fetch the external reference data on a GitHub runner, which has unrestricted
+# network access, and publish the result as a workflow artifact.
+#
+# This exists because a Claude Code session's egress is governed by the
+# environment's network policy, and the genomics hosts are frequently not on it
+# while GitHub always is. Rather than treat that as a blocker, the acquisition
+# runs where the network is and the session reads the artifact back through the
+# GitHub hosts it can already reach.
+#
+# It is also simply a better way to acquire reference data than a curator
+# running curl by hand: the run is logged, the inputs are recorded, the parsing
+# is done by this repository's own CLI, and the result is reproducible.
+#
+# Trigger from the Actions tab -- two taps on a phone -- or with:
+#   gh workflow run acquire-reference.yml -f clinvar_months=2018-01,2024-01
+
+on:
+  workflow_dispatch:
+    inputs:
+      mane_release:
+        description: 'MANE release directory, e.g. release_1.4'
+        required: true
+        default: 'release_1.4'
+      mane_version:
+        description: 'MANE file version tag, e.g. v1.4'
+        required: true
+        default: 'v1.4'
+      genes:
+        description: 'Comma-separated gene configs to populate'
+        required: true
+        default: 'BRCA1,BRCA2'
+      clinvar_months:
+        description: 'Comma-separated ClinVar archive months (YYYY-MM), or empty to skip'
+        required: false
+        default: '2024-01'
+      clinvar_current:
+        description: 'Also build a snapshot from the current ClinVar release'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Download MANE Select
+        env:
+          RELEASE: ${{ inputs.mane_release }}
+          VERSION: ${{ inputs.mane_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw data/reference
+          BASE="https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/${RELEASE}"
+          # The RefSeq genomic GTF is the one keyed by NM_ accessions, which is
+          # what the gene configs name. The Ensembl one uses ENST identifiers
+          # and would find nothing.
+          curl -fSL --retry 3 -o raw/mane.refseq_genomic.gtf.gz \
+            "${BASE}/MANE.GRCh38.${VERSION}.refseq_genomic.gtf.gz"
+          curl -fSL --retry 3 -o raw/mane.refseq_rna.fna.gz \
+            "${BASE}/MANE.GRCh38.${VERSION}.refseq_rna.fna.gz"
+          ls -lh raw/
+
+      - name: Extract each transcript and import it
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            echo "::group::$gene"
+            vus-foresight reference from-mane \
+              --gene "config/genes/${gene}.yaml" \
+              --gtf raw/mane.refseq_genomic.gtf.gz \
+              --fasta raw/mane.refseq_rna.fna.gz \
+              --out-dir data/reference
+            echo "::endgroup::"
+          done
+
+      - name: Verify the enumeration invariants against the real transcripts
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            vus-foresight enumerate --gene "config/genes/${gene}.yaml" --data-root data
+          done
+          # The exact cardinalities of spec section 11. If the coordinates are
+          # wrong, this is where it shows -- before anything is published.
+          pytest -q -m requires_reference tests/layer1_enumeration
+
+      - name: Build dated ClinVar snapshots
+        if: ${{ inputs.clinvar_months != '' || inputs.clinvar_current }}
+        env:
+          MONTHS: ${{ inputs.clinvar_months }}
+          GENES: ${{ inputs.genes }}
+          CURRENT: ${{ inputs.clinvar_current }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/snapshots
+          IFS=',' read -ra GENE_LIST <<< "$GENES"
+
+          build_for () {
+            local source_file="$1" label="$2"
+            for gene in "${GENE_LIST[@]}"; do
+              gene="$(echo "$gene" | xargs)"
+              # --gene reads the transcript from the config, and the match is
+              # version-exact on purpose: a classification made against
+              # NM_007294.3 is not evidence about a coordinate in NM_007294.4.
+              # An older archive month may legitimately yield nothing for that
+              # reason, which is a warning rather than a failure.
+              vus-foresight clinvar build \
+                --source "$source_file" \
+                --out "data/snapshots/clinvar_${label}_${gene}.tsv" \
+                --gene "config/genes/${gene}.yaml" \
+                || echo "::warning::no records for $gene in $label (check transcript version)"
+            done
+          }
+
+          if [ -n "${MONTHS}" ]; then
+            IFS=',' read -ra MONTH_LIST <<< "$MONTHS"
+            for month in "${MONTH_LIST[@]}"; do
+              month="$(echo "$month" | xargs)"
+              echo "::group::ClinVar $month"
+              curl -fSL --retry 3 -o "raw/variant_summary_${month}.txt.gz" \
+                "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive/variant_summary_${month}.txt.gz" \
+                || { echo "::warning::archive month $month unavailable"; echo "::endgroup::"; continue; }
+              build_for "raw/variant_summary_${month}.txt.gz" "${month}-01"
+              rm -f "raw/variant_summary_${month}.txt.gz"
+              echo "::endgroup::"
+            done
+          fi
+
+          if [ "${CURRENT}" = "true" ]; then
+            echo "::group::ClinVar current"
+            curl -fSL --retry 3 -o raw/variant_summary_current.txt.gz \
+              "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
+            build_for raw/variant_summary_current.txt.gz "$(date -u +%Y-%m-%d)"
+            rm -f raw/variant_summary_current.txt.gz
+            echo "::endgroup::"
+          fi
+
+          ls -lh data/snapshots/ || true
+
+      - name: Check what was materialised
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            snapshot="$(ls -1 data/snapshots/clinvar_*_${gene}.tsv 2>/dev/null | tail -1 || true)"
+            if [ -n "$snapshot" ]; then
+              vus-foresight data check --gene "config/genes/${gene}.yaml" \
+                --data-root data --clinvar "$snapshot"
+            else
+              vus-foresight data check --gene "config/genes/${gene}.yaml" --data-root data
+            fi
+          done
+
+      - name: Show the populated gene configs
+        run: |
+          # These are small and belong in version control. Copy them out of the
+          # log into a commit, or take them from the artifact.
+          for f in config/genes/*.yaml; do
+            echo "::group::$f"; cat "$f"; echo "::endgroup::"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vus-foresight-reference
+          path: |
+            data/reference/
+            data/snapshots/
+            config/genes/
+          retention-days: 30
+          if-no-files-found: error

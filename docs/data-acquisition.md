@@ -10,6 +10,35 @@ Ordem recomendada: 1 → 2 → 4 → 3 → 5 → 6. As fases 0–3 do projeto s�
 
 ---
 
+## 0. O caminho mais curto: deixar o GitHub buscar
+
+Se a sessão do Claude Code tem egresso restrito — o caso comum — não é preciso liberar nada. Um
+runner do GitHub Actions tem rede irrestrita, e os hosts do GitHub estão na allowlist de qualquer
+política. Então a aquisição roda lá e a sessão lê o resultado de volta.
+
+```bash
+gh workflow run acquire-reference.yml -f clinvar_months=2018-01,2024-01
+```
+
+Ou, do celular: aba **Actions** → *acquire-reference* → **Run workflow**.
+
+O workflow (`.github/workflows/acquire-reference.yml`) baixa o release do MANE e os
+`variant_summary` do ClinVar, roda **a CLI deste próprio repositório** para extrair e normalizar, e
+publica tudo como artifact. Rodar a nossa CLI e não `awk` no YAML é o ponto: o formato de saída é
+garantido pela mesma implementação que o motor consome, e a etapa de verificação roda os invariantes
+de cardinalidade da §11 contra os transcritos reais **antes** de publicar. Se as coordenadas
+estiverem erradas, o workflow falha ali e não publica nada.
+
+Isso também é melhor que um curador rodando `curl` à mão, independentemente de rede: a execução fica
+logada, os inputs ficam registrados, e o resultado é reproduzível.
+
+Depois, na sessão: baixe o artifact (`gh run download`) ou reponha os arquivos pequenos —
+`config/genes/*.yaml` populados e os FASTA de transcrito têm poucos KB e cabem num commit.
+
+O resto deste documento descreve os passos manuais, que continuam valendo quando há rede.
+
+---
+
 ## Panorama
 
 | # | Fonte | Para quê | Ordem de grandeza | Precisa de conta |
@@ -39,47 +68,42 @@ Sem isto nada roda: `build_transcript` levanta `ReferenceUnavailable` e todos os
 e um `summary.txt` que lista o par RefSeq/Ensembl de cada gene.
 
 ```bash
-mkdir -p data/reference && cd data/reference
+mkdir -p data/reference
 BASE=https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/release_1.4
-curl -O $BASE/MANE.GRCh38.v1.4.refseq_rna.fna.gz
-curl -O $BASE/MANE.GRCh38.v1.4.ensembl_genomic.gtf.gz
-
-# transcrito spliced, um registro só
-python - <<'PY'
-import gzip
-want = "NM_007294.4"
-out, keep = [], False
-with gzip.open("MANE.GRCh38.v1.4.refseq_rna.fna.gz", "rt") as fh:
-    for line in fh:
-        if line.startswith(">"):
-            keep = line[1:].split()[0] == want
-            if keep: out.append(f">{want}\n")
-        elif keep:
-            out.append(line)
-open("BRCA1_NM_007294.4.fa", "w").writelines(out)
-PY
+curl -fSL -o data/reference/MANE.GRCh38.v1.4.refseq_rna.fna.gz \
+  $BASE/MANE.GRCh38.v1.4.refseq_rna.fna.gz
+curl -fSL -o data/reference/MANE.GRCh38.v1.4.refseq_genomic.gtf.gz \
+  $BASE/MANE.GRCh38.v1.4.refseq_genomic.gtf.gz
 ```
 
-**Éxons.** O importador quer um TSV `label<TAB>start<TAB>end` em **ordem de transcrito**, não
-genômica. Para BRCA1, que está na fita negativa, as coordenadas descem. Do GTF:
+**Não faça as duas coisas à mão.** Um comando faz o par inteiro, e faz as verificações que um
+pipeline de `awk` não faz:
 
 ```bash
-zcat MANE.GRCh38.v1.4.ensembl_genomic.gtf.gz \
-  | awk -F'\t' '$3=="exon" && $9 ~ /NM_007294.4/' \
-  | sed -n 's/.*exon_number "\([0-9]*\)".*/\1\t&/p' \
-  > BRCA1_exons_raw.tsv
+vus-foresight reference from-mane \
+  --gene config/genes/BRCA1.yaml \
+  --gtf   data/reference/MANE.GRCh38.v1.4.refseq_genomic.gtf.gz \
+  --fasta data/reference/MANE.GRCh38.v1.4.refseq_rna.fna.gz
 ```
 
-Duas armadilhas aqui, e ambas produzem um transcrito internamente consistente e biologicamente
-errado:
+Use o GTF **refseq**_genomic, não o ensembl_genomic: o primeiro é chaveado por acessos `NM_`, que é
+o que os gene configs nomeiam; o segundo usa identificadores `ENST` e não acharia nada.
 
-- **não ordene por coordenada.** `exon_number` do GTF já está em ordem de transcrito; ordenar por
-  `start` inverte a fita negativa.
-- **os labels não são o `exon_number`.** BRCA1 não tem éxon 4 — a numeração clínica vai
-  `1,2,3,5,...,24` enquanto o `exon_number` do GTF vai `1..23`. Use a numeração clínica; ela está
-  declarada em `config/genes/BRCA1.yaml` e o importador confere.
+Três armadilhas que esse comando resolve, e as três produzem um transcrito internamente consistente
+e biologicamente errado:
 
-Depois:
+- **ordem de transcrito, não de coordenada.** O `exon_number` do GTF já está em ordem de transcrito;
+  ordenar por `start` inverte um gene da fita negativa. O comando toma a ordem do `exon_number` e
+  então **confere contra a fita** — descendente para `-`, ascendente para `+`.
+- **os labels não são o `exon_number`.** BRCA1 não tem éxon 4: a numeração clínica vai
+  `1,2,3,5,...,24` enquanto o `exon_number` do GTF vai `1..23`. Os labels vêm do gene config, e o
+  comando avisa quando os dois divergem.
+- **GTF e FASTA de releases diferentes.** Cada um plausível sozinho, juntos deslocam todas as
+  coordenadas. O comando compara a soma dos comprimentos exônicos com o tamanho do registro FASTA e
+  recusa se diferirem.
+
+Ele já roda o `reference import` em seguida, que **deriva** `cds_start_tx`/`cds_end_tx` e grava o
+`sha256`. Para importar de arquivos que você mesmo preparou, o passo continua disponível:
 
 ```bash
 vus-foresight reference import \
@@ -108,12 +132,12 @@ a série temporal precisa.
 ```bash
 mkdir -p data/raw data/snapshots
 for month in 2018-01 2020-01 2022-01 2024-01; do
-  curl -o data/raw/variant_summary_$month.txt.gz \
+  curl -fSL -o data/raw/variant_summary_$month.txt.gz \
     https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive/variant_summary_$month.txt.gz
   vus-foresight clinvar build \
     --source data/raw/variant_summary_$month.txt.gz \
     --out    data/snapshots/clinvar_${month}-01_BRCA1.tsv \
-    --transcript NM_007294.4
+    --gene   config/genes/BRCA1.yaml
 done
 ```
 

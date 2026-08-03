@@ -71,21 +71,32 @@ app.add_typer(data_app, name="data")
 FIXED_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc).replace(tzinfo=None)
 
 
-def _load(gene_path: Path, spec_dir: Path, data_root: Path):
-    """Load a gene, its specification and its reference, or fail readably.
+def _load_reference(gene_path: Path, data_root: Path):
+    """Load a gene and its reference, or fail readably.
 
     A missing reference is an expected state, not a crash: the resources are not
     vendored on purpose (see docs/reference-data.md), so the message has to say
     what to run next rather than print a stack trace at a curator.
     """
     config = load_gene_config(gene_path)
-    spec = load_spec(spec_dir / f"{config.spec}.yaml")
     try:
         transcript = build_transcript(config, data_root=data_root)
         flanks = load_flanks(config, data_root=data_root)
     except ReferenceUnavailable as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from None
+    return config, transcript, flanks
+
+
+def _load(gene_path: Path, spec_dir: Path, data_root: Path):
+    """As above, plus the specification. Only commands that classify need it.
+
+    Enumeration deliberately does not: how many variants exist is a property of
+    the transcript, not of anyone's interpretation rules, and coupling the two
+    would make counting fail because a specification file was elsewhere.
+    """
+    config, transcript, flanks = _load_reference(gene_path, data_root)
+    spec = load_spec(spec_dir / f"{config.spec}.yaml")
     return config, spec, transcript, flanks
 
 
@@ -93,11 +104,14 @@ def _load(gene_path: Path, spec_dir: Path, data_root: Path):
 def enumerate_command(
     gene: Path = typer.Option(..., help="Path to a gene YAML."),
     data_root: Path = typer.Option(Path("data"), help="Root for reference resources."),
-    spec_dir: Path = typer.Option(Path("config/specs")),
     out: Optional[Path] = typer.Option(None, help="Write the enumerated variants as TSV."),
 ) -> None:
-    """Count and optionally dump every possible variant for a gene."""
-    config, _spec, transcript, flanks = _load(gene, spec_dir, data_root)
+    """Count and optionally dump every possible variant for a gene.
+
+    Needs no specification: how many variants exist is a property of the
+    transcript, not of anyone's interpretation rules.
+    """
+    config, transcript, flanks = _load_reference(gene, data_root)
 
     counts = {
         "coding_snv": coding_snv_count(transcript),
@@ -294,6 +308,60 @@ def report_command(
 
     typer.echo("\n== largest equivalence classes ==")
     typer.echo(str(equivalence_summary(frame).head(top)))
+
+
+@reference_app.command("from-mane")
+def reference_from_mane(
+    gene: Path = typer.Option(..., help="Path to the gene YAML."),
+    gtf: Path = typer.Option(..., help="MANE genomic GTF (.gtf or .gtf.gz)."),
+    fasta: Path = typer.Option(..., help="MANE RefSeq RNA FASTA (.fna or .fna.gz)."),
+    out_dir: Path = typer.Option(Path("data/reference")),
+    import_after: bool = typer.Option(
+        True, help="Run 'reference import' on the extracted files immediately."
+    ),
+) -> None:
+    """Extract one transcript's FASTA and exon table from a MANE Select release.
+
+    The exon table comes out in **transcript order**, taken from the GTF's
+    ``exon_number`` and then checked against the strand. Sorting by coordinate
+    instead -- the obvious thing -- reverses a minus-strand gene into a
+    transcript that is internally consistent and biologically wrong.
+
+    Exon labels come from the gene config, not the GTF: BRCA1's GTF numbers its
+    exons 1..23 while the clinical numbering runs 1,2,3,5,...,24.
+    """
+    from .genome.mane import extract_transcript
+
+    config = load_gene_config(gene)
+    try:
+        extract = extract_transcript(config, gtf_path=gtf, fasta_path=fasta)
+    except ReferenceUnavailable as exc:
+        typer.secho(str(exc), fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2) from None
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fasta_out = out_dir / f"{config.gene}_{extract.transcript_id}.fa"
+    exons_out = out_dir / f"{config.gene}_exons.tsv"
+    fasta_out.write_text(extract.fasta_text(), encoding="ascii")
+    exons_out.write_text(extract.exon_table(), encoding="utf-8")
+
+    typer.echo(
+        f"{config.gene}: {len(extract.fasta):,} nt, {len(extract.exons)} exons on "
+        f"{extract.chrom}{extract.strand}"
+    )
+    for warning in extract.warnings:
+        typer.secho(f"  note: {warning}", fg=typer.colors.YELLOW)
+    typer.echo(f"  wrote {fasta_out}")
+    typer.echo(f"  wrote {exons_out}")
+
+    if import_after:
+        block = import_reference(
+            config, sequence_path=fasta_out, exon_table_path=exons_out, config_path=gene
+        )
+        typer.echo(
+            f"  imported: CDS c.1 at transcript position {block['cds_start_tx']}, "
+            f"sha256 {block['sequence_sha256'][:16]}..."
+        )
 
 
 @reference_app.command("import")
@@ -495,8 +563,11 @@ def data_check(
 def clinvar_build(
     source: Path = typer.Option(..., help="ClinVar variant_summary.txt(.gz) release."),
     out: Path = typer.Option(..., help="Normalised snapshot TSV to write."),
-    transcript: str = typer.Option(
-        ..., help="MANE transcript with its version, e.g. NM_007294.4."
+    transcript: Optional[str] = typer.Option(
+        None, help="MANE transcript with its version, e.g. NM_007294.4."
+    ),
+    gene: Optional[Path] = typer.Option(
+        None, help="Gene YAML to take the transcript from, instead of --transcript."
     ),
     assembly: str = typer.Option("GRCh38"),
 ) -> None:
@@ -506,6 +577,11 @@ def clinvar_build(
     NM_007294.3 is not evidence about a coordinate in NM_007294.4 unless
     somebody has checked that the two agree.
     """
+    if (transcript is None) == (gene is None):
+        raise typer.BadParameter("pass exactly one of --transcript or --gene")
+    if gene is not None:
+        transcript = load_gene_config(gene).transcript.id
+    assert transcript is not None
     stats = build_snapshot(source, out, transcript=transcript, assembly=assembly)
     typer.echo(f"{out}: {stats.summary()}")
     if stats.kept == 0:

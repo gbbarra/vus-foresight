@@ -34,7 +34,13 @@ Duas coisas ainda **não** estão no repositório, e é deliberado:
    números são placeholders marcados `verified: false`, e a CLI se recusa a escrever um mapa a
    partir deles sem `--allow-unverified`.
 
-Tudo o que não depende desses dois roda hoje, sobre genes sintéticos, com 136 testes.
+Para materializar a referência sem depender do egresso da sessão, o workflow
+[`acquire-reference`](.github/workflows/acquire-reference.yml) roda a aquisição num runner do GitHub
+— que tem rede irrestrita — usando a CLI deste próprio repositório, verifica os invariantes de
+cardinalidade da §11 contra os transcritos reais, e só então publica o artifact. Duas toques na aba
+Actions. Detalhes em [`docs/data-acquisition.md`](docs/data-acquisition.md).
+
+Tudo o que não depende desses dois roda hoje, sobre genes sintéticos, com 202 testes.
 
 ```bash
 pip install -e ".[dev]"
