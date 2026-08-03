@@ -155,10 +155,20 @@ def test_a_default_payload_counts_as_coverage_because_it_is_an_assertion(
     assert with_default[0].coverage == 1.0
 
 
-def test_the_report_is_usable_only_when_the_reference_is_present(minus_gene, tmp_path):
-    absent = check_reference(
+def test_the_report_is_usable_only_when_the_reference_is_present(minus_config, tmp_path):
+    """Pointed at an empty data root, so it tests absence rather than a gene.
+
+    An earlier version asserted this against BRCA2's config, which stopped
+    testing anything the moment BRCA2's reference was pinned in the repository.
+    """
+    absent = check_reference(minus_config, data_root=tmp_path)
+    assert not absent.present
+    assert not DataReport(gene="TOYM", reference=absent).usable
+
+    present = check_reference(
         load_gene_config(CONFIG_DIR / "genes" / "BRCA2.yaml"), data_root=DATA_ROOT
     )
-    report = DataReport(gene="BRCA2", reference=absent)
-    assert not report.usable
-    assert "BRCA2" in report.summary()
+    report = DataReport(gene="BRCA2", reference=present)
+    assert report.usable
+    assert present.records == 27
+    assert "strand +" in (present.detail or "")
