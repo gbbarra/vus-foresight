@@ -83,10 +83,12 @@ aninhada (`gnomad.faf95_popmax` → `frequency.gnomad.faf95_popmax`).
 | `PredictorAdapter` | `predictor` | `grch38_pos` | `bayesdel`, `revel` |
 | `SpliceAdapter` | `splice` | `grch38_pos` | `ds_max` |
 | `FunctionalAdapter` | `functional` | `hgvs_p` | `classification`, `score`, `dataset` |
-| `ClinVarAdapter` | `clinvar` | `hgvs_p` | `same_protein_change.classification`, `codon.other_change_classification` |
 
 `grch38_pos` é `chrom-pos-ref-alt` na **fita plus do genoma**, independentemente da fita do
 transcrito.
+
+O ClinVar é a exceção e tem seção própria abaixo: PS1 e PM5 não são respondíveis por busca de chave
+única.
 
 ### Ausente não é zero
 
@@ -116,7 +118,72 @@ bancada. Colapsar os dois enterra o achado mais acionável do sistema.
 BRCA1 e BRCA2 têm datasets de SGE **distintos e independentemente calibrados**. A proveniência é
 guardada por variante para que um escore nunca seja atribuído ao ensaio errado.
 
-## 4. Fixtures opcionais de teste
+## 4. Snapshots datados do ClinVar (PS1 e PM5)
+
+O ClinVar não entra por `TableAdapter`. Duas exclusões separam um critério de uma tautologia, e
+nenhuma é expressável numa tabela de chave única:
+
+- **PS1 tem que excluir o registro da própria variante.** O critério pergunta se *outra* alteração
+  de nucleotídeo que produz a mesma alteração proteica já é patogênica estabelecida. Uma variante
+  que é ela mesma patogênica no ClinVar satisfazendo PS1 a partir do próprio registro é circular, e
+  fabricaria quatro pontos para toda variante já classificada do gene.
+- **PM5 tem que excluir a mesma alteração proteica** (isso é assunto do PS1) e exigir que o registro
+  vizinho seja **missense** — "uma alteração *missense* diferente neste resíduo". Um nonsense no
+  mesmo códon é observação de PVS1, não de PM5.
+
+Por isso o snapshot é indexado por nucleotídeo, por proteína e por códon, e resolvido por variante.
+
+### Construir o snapshot
+
+```bash
+vus-foresight clinvar build \
+  --source data/raw/variant_summary_2024-01.txt.gz \
+  --out    data/snapshots/clinvar_2024-01-01_BRCA1.tsv \
+  --transcript NM_007294.4
+```
+
+O parser lê colunas **por nome de cabeçalho**, nunca por posição: o ClinVar adiciona colunas entre
+releases, e um parser posicional passa a ler o campo errado silenciosamente na primeira vez que isso
+acontece — o que parece mudança de dado, não bug.
+
+O transcrito é casado **com a versão**. Uma classificação feita contra `NM_007294.3` não é evidência
+sobre uma coordenada em `NM_007294.4` a menos que alguém tenha conferido que as duas coincidem;
+casar frouxamente misturaria transcritos, que é exatamente o que a regra MANE-only existe para
+impedir. O comando reporta quantas linhas foram descartadas e por quê, e falha se nada sobrar.
+
+Formato normalizado (ordenado, de modo que dois builds batem byte a byte):
+
+```
+hgvs_c	hgvs_p	codon	classification	stars	last_evaluated
+```
+
+`stars` vem do `ReviewStatus` do ClinVar. `--clinvar-min-stars` (padrão 1) é o piso que um registro
+vizinho precisa vencer para sustentar PS1 ou PM5: uma submissão sem critérios declarados não é um
+precedente que alguém citaria.
+
+### O que o mapa deliberadamente não lê
+
+O adaptador reporta `clinvar.self.classification` — a própria opinião do ClinVar sobre a variante —
+para proveniência e para o join com o `vus-hindsight`. **Nenhum critério lê esse campo**, e há um
+teste que garante isso. Classificar uma variante porque o ClinVar já classificou tornaria o mapa um
+espelho, não uma medida.
+
+### Série temporal
+
+Recompute o mapa contra snapshots de datas distintas e faça o diff:
+
+```bash
+vus-foresight timeline \
+  2018-01-01=out/T2018/gene=BRCA1/gap_map.parquet \
+  2024-01-01=out/T2024/gene=BRCA1/gap_map.parquet \
+  --out out/transitions.tsv
+```
+
+A saída atribui cada transição pelo *tipo* de evidência que a causou —
+`neighbour_evidence` quando só critérios semi-intrínsecos se moveram, ou seja, nada novo se
+aprendeu sobre aquela variante. Ver [`validation-protocol.md`](validation-protocol.md).
+
+## 5. Fixtures opcionais de teste
 
 Ficam em `tests/fixtures/` e todos os testes que os usam pulam se ausentes.
 
@@ -127,7 +194,7 @@ Ficam em `tests/fixtures/` e todos os testes que os usam pulam se ausentes.
 | `enigma_three_star.tsv` | concordância em nível de critério e invariante de não-superestimação |
 | `hindsight_outcomes.tsv` | protocolo §10 |
 
-## 5. Convenções de HGVS fixadas neste projeto
+## 6. Convenções de HGVS fixadas neste projeto
 
 Uma escolha de convenção errada aparece como divergência **sistemática** contra uma referência
 externa, e por isso é diagnosticável. As escolhas são:

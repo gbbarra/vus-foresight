@@ -19,12 +19,31 @@ from typing import Any, Iterable, Sequence
 
 import polars as pl
 
-from .acmg import BlockingReason, FeasibilityTag
-from .gapmap import GAP_MAP_COLUMNS, GapMapRow
+from .acmg import (
+    ACMGClass,
+    BlockingReason,
+    CriterionOutcome,
+    Direction,
+    EvidenceClass,
+    FeasibilityTag,
+    SkipReason,
+    Strength,
+)
+from .gapmap import (
+    GAP_MAP_COLUMNS,
+    AppliedCriterion,
+    EvidenceRequirement,
+    EvidenceSet,
+    GapMapRow,
+    SkippedCriterion,
+)
+from .variant import Consequence, VariantKind
 
 __all__ = [
     "GAP_MAP_SCHEMA",
     "rows_to_frame",
+    "rows_from_frame",
+    "read_rows",
     "write_parquet",
     "read_parquet",
     "blocking_summary",
@@ -207,6 +226,97 @@ def write_parquet(rows: Iterable[GapMapRow], path: str | Path) -> Path:
 
 def read_parquet(path: str | Path) -> pl.DataFrame:
     return pl.read_parquet(path)
+
+
+def rows_from_frame(frame: pl.DataFrame) -> list[GapMapRow]:
+    """Rehydrate full :class:`GapMapRow` objects, criteria and all.
+
+    The timeline diff attributes a transition by looking at *which* criteria
+    moved and what evidence class they belong to, so a partial rehydration that
+    drops ``criteria_applied`` would silently make every transition look like a
+    specification change.
+    """
+    rows: list[GapMapRow] = []
+    for record in frame.iter_rows(named=True):
+        rows.append(
+            GapMapRow(
+                gene=record["gene"],
+                transcript=record["transcript"],
+                hgvs_c=record["hgvs_c"],
+                hgvs_p=record["hgvs_p"],
+                grch38_pos=record["grch38_pos"],
+                consequence=Consequence(record["consequence"]),
+                variant_kind=VariantKind(record["variant_kind"]),
+                equivalence_class_id=record["equivalence_class_id"],
+                mutational_distance=record["mutational_distance"],
+                criteria_applied=tuple(
+                    AppliedCriterion(
+                        code=c["code"],
+                        direction=Direction(c["direction"]),
+                        strength=Strength(c["strength"]),
+                        points=c["points"],
+                        evidence_class=EvidenceClass(c["evidence_class"]),
+                        evidence=c["evidence"],
+                        source=c["source"],
+                    )
+                    for c in record["criteria_applied"]
+                ),
+                criteria_evaluated_not_applied=tuple(
+                    SkippedCriterion(
+                        code=s["code"],
+                        direction=Direction(s["direction"]),
+                        evidence_class=EvidenceClass(s["evidence_class"]),
+                        outcome=CriterionOutcome(s["outcome"]),
+                        reason=SkipReason(s["reason"]),
+                        missing_fields=tuple(s["missing_fields"] or ()),
+                        detail=s["detail"],
+                    )
+                    for s in record["criteria_evaluated_not_applied"]
+                ),
+                points_current=record["points_current"],
+                class_current=ACMGClass(record["class_current"]),
+                points_ceiling_intrinsic=record["points_ceiling_intrinsic"],
+                class_ceiling_intrinsic=ACMGClass(record["class_ceiling_intrinsic"]),
+                gap_to_LP=record["gap_to_LP"],
+                gap_to_LB=record["gap_to_LB"],
+                minimum_sufficient_sets=tuple(
+                    EvidenceSet(
+                        target=ACMGClass(s["target"]),
+                        requirements=tuple(
+                            EvidenceRequirement(
+                                code=r["code"],
+                                direction=Direction(r["direction"]),
+                                strength=Strength(r["strength"]),
+                                points=r["points"],
+                                evidence_class=EvidenceClass(r["evidence_class"]),
+                                feasibility=FeasibilityTag(r["feasibility"]),
+                                required_observations=r["required_observations"],
+                                description=r["description"],
+                            )
+                            for r in s["requirements"]
+                        ),
+                        total_points=s["total_points"],
+                        feasibility=FeasibilityTag(s["feasibility"]),
+                        acquisition_cost=s["acquisition_cost"],
+                    )
+                    for s in record["minimum_sufficient_sets"]
+                ),
+                blocking_reason=BlockingReason(record["blocking_reason"]),
+                spec_version=record["spec_version"],
+                clinvar_snapshot=record["clinvar_snapshot"],
+                gnomad_version=record["gnomad_version"],
+                source_versions={
+                    entry["key"]: entry["value"] for entry in record["source_versions"]
+                },
+                computed_at=record["computed_at"],
+            )
+        )
+    return rows
+
+
+def read_rows(path: str | Path) -> list[GapMapRow]:
+    """Read a gap map partition straight back into model objects."""
+    return rows_from_frame(read_parquet(path))
 
 
 def blocking_summary(frame: pl.DataFrame) -> pl.DataFrame:

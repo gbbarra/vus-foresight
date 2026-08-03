@@ -58,8 +58,10 @@ def _fully_evidenced_adapters(tmp_path, gene, variants):
     NOT_EVALUABLE, so a run with no data cannot distinguish a padded footprint
     from a correct one.
     """
+    from datetime import date
+
     from vus_foresight.adapters import (
-        ClinVarAdapter,
+        ClinVarSnapshotAdapter,
         FrequencyAdapter,
         FunctionalAdapter,
         PredictorAdapter,
@@ -104,16 +106,22 @@ def _fully_evidenced_adapters(tmp_path, gene, variants):
         ),
         encoding="utf-8",
     )
+    # Every ClinVar record here is a *neighbour*: a different nucleotide change
+    # reaching the same protein change (PS1), or a different protein change at
+    # the same codon (PM5). A record matching the variant itself would be
+    # excluded by the adapter, so a fixture built from the variants' own
+    # descriptions would silently test nothing.
     clinvar = tmp_path / "clinvar.tsv"
-    clinvar.write_text(
-        "hgvs_p\tsame_protein_change.classification\tcodon.other_change_classification\n"
-        + "".join(
-            f"{p}\t{'pathogenic' if i % 4 == 0 else 'benign'}\t"
-            f"{'likely_pathogenic' if i % 3 == 0 else 'benign'}\n"
-            for i, p in enumerate(proteins)
-        ),
-        encoding="utf-8",
-    )
+    rows = ["hgvs_c\thgvs_p\tcodon\tclassification\tstars\tlast_evaluated"]
+    for i, v in enumerate(coding):
+        if v.hgvs_p and i % 4 == 0:
+            rows.append(f"c.{900000 + i}A>G\t{v.hgvs_p}\t{v.codon_index}\tpathogenic\t3\t")
+        if i % 3 == 0:
+            rows.append(
+                f"c.{800000 + i}A>G\tp.Ala{v.codon_index}Trp\t{v.codon_index}"
+                f"\tlikely_pathogenic\t2\t"
+            )
+    clinvar.write_text("\n".join(rows) + "\n", encoding="utf-8")
     return [
         FrequencyAdapter(frequency, "test", default_payload={"gnomad": {"faf95_popmax": 0.0}}),
         PredictorAdapter(predictor, "test"),
@@ -121,7 +129,7 @@ def _fully_evidenced_adapters(tmp_path, gene, variants):
         FunctionalAdapter(
             functional, "test", assayed_regions=((1, gene.transcript.protein_length, "TOY-SGE"),)
         ),
-        ClinVarAdapter(clinvar, "2026-01-01", snapshot_date="2026-01-01"),
+        ClinVarSnapshotAdapter.from_path(clinvar, snapshot_date=date(2026, 1, 1)),
     ]
 
 

@@ -5,6 +5,8 @@
     enumerate   how many variants exist, by class -- the layer-1 invariants
     map         the gap map itself, to Parquet
     report      the aggregations: blocking reasons, available-uningested
+    timeline    diff maps computed at different dates, and attribute what moved
+    validate    the section 10 protocol against vus-hindsight outcomes
     selftest    the whole pipeline on a synthetic gene, no reference needed
 """
 
@@ -17,12 +19,13 @@ from typing import Optional
 import typer
 
 from .adapters import (
-    ClinVarAdapter,
+    ClinVarSnapshotAdapter,
     FrequencyAdapter,
     FunctionalAdapter,
     PredictorAdapter,
     SpliceAdapter,
 )
+from .adapters.clinvar_import import build_snapshot
 from .engine.cnv_scoring import CNVScoringConfig, cnv_row
 from .engine.pipeline import MapRunner, default_registry
 from .engine.spec import load_spec
@@ -47,6 +50,7 @@ from .output import (
     blocking_summary,
     equivalence_summary,
     read_parquet,
+    read_rows,
     write_parquet,
 )
 
@@ -56,6 +60,8 @@ app = typer.Typer(
 )
 reference_app = typer.Typer(help="Manage MANE Select reference resources.")
 app.add_typer(reference_app, name="reference")
+clinvar_app = typer.Typer(help="Build dated ClinVar snapshots for PS1 and PM5.")
+app.add_typer(clinvar_app, name="clinvar")
 
 #: Determinism: the default stamp is a fixed epoch, not the wall clock. A run
 #: that wants a real timestamp must say so, because two runs that differ only in
@@ -132,8 +138,17 @@ def map_command(
     predictor: Optional[Path] = typer.Option(None, help="dbNSFP snapshot TSV."),
     splice: Optional[Path] = typer.Option(None, help="SpliceAI snapshot TSV."),
     functional: Optional[Path] = typer.Option(None, help="MAVE/SGE snapshot TSV."),
-    clinvar: Optional[Path] = typer.Option(None, help="Dated ClinVar snapshot TSV."),
+    clinvar: Optional[Path] = typer.Option(
+        None, help="Normalised ClinVar snapshot from 'vus-foresight clinvar build'."
+    ),
     clinvar_date: Optional[str] = typer.Option(None, help="ISO date of the ClinVar snapshot."),
+    clinvar_min_stars: int = typer.Option(
+        1,
+        help=(
+            "Review-status floor a neighbouring ClinVar record must clear before it "
+            "can support PS1 or PM5."
+        ),
+    ),
     gnomad_version: str = typer.Option("v4", help="Recorded in every row's provenance."),
     computed_at: Optional[str] = typer.Option(
         None, help="ISO timestamp stamped on every row. Defaults to a fixed epoch."
@@ -198,7 +213,13 @@ def map_command(
             )
         )
     if clinvar is not None:
-        extra.append(ClinVarAdapter(clinvar, clinvar_date or "unknown", snapshot_date=clinvar_date))
+        extra.append(
+            ClinVarSnapshotAdapter.from_path(
+                clinvar,
+                snapshot_date=date.fromisoformat(clinvar_date) if clinvar_date else None,
+                min_stars=clinvar_min_stars,
+            )
+        )
 
     stamp = datetime.fromisoformat(computed_at) if computed_at else FIXED_EPOCH
     runner = MapRunner(
@@ -317,8 +338,7 @@ def validate_command(
     """
     from .validation import read_outcomes, validate as run_validation
 
-    frame = read_parquet(parquet)
-    rows = _frame_to_rows(frame)
+    rows = read_rows(parquet)
     result = run_validation(
         rows,
         read_outcomes(outcomes),
@@ -336,52 +356,118 @@ def validate_command(
             typer.echo(f"  {marker}{predicted:28s} {observed:28s} {count:>6,}")
 
 
-def _frame_to_rows(frame):
-    """Rehydrate the subset of each row that the validation protocol reads."""
-    from .acmg import ACMGClass, BlockingReason, FeasibilityTag
-    from .gapmap import EvidenceSet, GapMapRow
-    from .variant import Consequence, VariantKind
+@clinvar_app.command("build")
+def clinvar_build(
+    source: Path = typer.Option(..., help="ClinVar variant_summary.txt(.gz) release."),
+    out: Path = typer.Option(..., help="Normalised snapshot TSV to write."),
+    transcript: str = typer.Option(
+        ..., help="MANE transcript with its version, e.g. NM_007294.4."
+    ),
+    assembly: str = typer.Option("GRCh38"),
+) -> None:
+    """Build a dated ClinVar snapshot for one transcript.
 
-    rows = []
-    for record in frame.iter_rows(named=True):
-        sets = tuple(
-            EvidenceSet(
-                target=ACMGClass(s["target"]),
-                requirements=(),
-                total_points=s["total_points"],
-                feasibility=FeasibilityTag(s["feasibility"]),
-                acquisition_cost=s["acquisition_cost"],
-            )
-            for s in record["minimum_sufficient_sets"]
+    The transcript is matched *with its version*: a classification made against
+    NM_007294.3 is not evidence about a coordinate in NM_007294.4 unless
+    somebody has checked that the two agree.
+    """
+    stats = build_snapshot(source, out, transcript=transcript, assembly=assembly)
+    typer.echo(f"{out}: {stats.summary()}")
+    if stats.kept == 0:
+        typer.secho(
+            "no records kept -- check the transcript version and the assembly",
+            fg=typer.colors.RED,
+            err=True,
         )
-        rows.append(
-            GapMapRow(
-                gene=record["gene"],
-                transcript=record["transcript"],
-                hgvs_c=record["hgvs_c"],
-                hgvs_p=record["hgvs_p"],
-                grch38_pos=record["grch38_pos"],
-                consequence=Consequence(record["consequence"]),
-                variant_kind=VariantKind(record["variant_kind"]),
-                equivalence_class_id=record["equivalence_class_id"],
-                mutational_distance=record["mutational_distance"],
-                criteria_applied=(),
-                criteria_evaluated_not_applied=(),
-                points_current=record["points_current"],
-                class_current=ACMGClass(record["class_current"]),
-                points_ceiling_intrinsic=record["points_ceiling_intrinsic"],
-                class_ceiling_intrinsic=ACMGClass(record["class_ceiling_intrinsic"]),
-                gap_to_LP=record["gap_to_LP"],
-                gap_to_LB=record["gap_to_LB"],
-                minimum_sufficient_sets=sets,
-                blocking_reason=BlockingReason(record["blocking_reason"]),
-                spec_version=record["spec_version"],
-                clinvar_snapshot=record["clinvar_snapshot"],
-                gnomad_version=record["gnomad_version"],
-                computed_at=record["computed_at"],
+        raise typer.Exit(code=2)
+
+
+@app.command("timeline")
+def timeline_command(
+    snapshots: list[str] = typer.Argument(
+        ...,
+        help=(
+            "Two or more 'label=path.parquet' pairs, oldest first, e.g. "
+            "2020-01-01=out/T2020/gap_map.parquet"
+        ),
+    ),
+    out: Optional[Path] = typer.Option(None, help="Write the transitions as TSV."),
+    show: int = typer.Option(10, help="Example transitions to print per interval."),
+) -> None:
+    """Diff maps computed at different dates and attribute what moved.
+
+    The finding this exists for: variants that leave VUS because a *neighbour*
+    was classified, with no new evidence about themselves. That is what makes
+    the semi-intrinsic criteria worth separating from the intrinsic ones.
+    """
+    from .engine.timeline import compare_series
+
+    parsed: list[tuple[str, Path]] = []
+    for entry in snapshots:
+        if "=" not in entry:
+            raise typer.BadParameter(f"expected 'label=path', got {entry!r}")
+        label, path = entry.split("=", 1)
+        parsed.append((label, Path(path)))
+    if len(parsed) < 2:
+        raise typer.BadParameter("a timeline needs at least two snapshots")
+
+    series = [(label, read_rows(path)) for label, path in parsed]
+    diffs = compare_series(series)
+
+    lines: list[str] = []
+    for diff in diffs:
+        typer.echo(diff.summary())
+        for transition in diff.neighbour_driven_resolutions[:show]:
+            typer.echo(
+                f"    {transition.hgvs_c} {transition.hgvs_p or '':16s} "
+                f"{transition.class_before.value} -> {transition.class_after.value} "
+                f"via {'+'.join(code for code, _ in transition.criteria_gained)}"
             )
+        typer.echo("")
+        for transition in diff.transitions:
+            lines.append(
+                "\t".join(
+                    [
+                        diff.label_before,
+                        diff.label_after,
+                        transition.variant_id,
+                        transition.hgvs_p or "",
+                        transition.consequence,
+                        transition.class_before.value,
+                        transition.class_after.value,
+                        str(transition.points_before),
+                        str(transition.points_after),
+                        transition.blocking_before.value,
+                        transition.blocking_after.value,
+                        ";".join(f"{c}:{s}" for c, s in transition.criteria_gained),
+                        ";".join(f"{c}:{s}" for c, s in transition.criteria_lost),
+                        transition.cause.value,
+                    ]
+                )
+            )
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        header = "\t".join(
+            [
+                "label_before",
+                "label_after",
+                "variant_id",
+                "hgvs_p",
+                "consequence",
+                "class_before",
+                "class_after",
+                "points_before",
+                "points_after",
+                "blocking_before",
+                "blocking_after",
+                "criteria_gained",
+                "criteria_lost",
+                "cause",
+            ]
         )
-    return rows
+        out.write_text("\n".join([header, *lines]) + "\n", encoding="utf-8")
+        typer.echo(f"wrote {len(lines):,} transitions to {out}")
 
 
 @app.command("selftest")
@@ -389,6 +475,15 @@ def selftest(
     spec_dir: Path = typer.Option(Path("config/specs")),
     spec_name: str = typer.Option("toy_v0.1.0"),
     out: Optional[Path] = typer.Option(None, help="Write the synthetic map here."),
+    clinvar: Optional[Path] = typer.Option(
+        None,
+        help=(
+            "Optional ClinVar snapshot. Running selftest twice with different "
+            "snapshots and diffing the results with 'timeline' demonstrates the "
+            "section 4 observation without any reference data."
+        ),
+    ),
+    clinvar_date: Optional[str] = typer.Option(None, help="ISO date of that snapshot."),
 ) -> None:
     """Run the whole pipeline on a synthetic gene, with no reference data.
 
@@ -398,7 +493,12 @@ def selftest(
     """
     from .testing import build_demo_runner
 
-    runner, variants = build_demo_runner(spec_dir / f"{spec_name}.yaml")
+    snapshot_date = date.fromisoformat(clinvar_date) if clinvar_date else None
+    runner, variants = build_demo_runner(
+        spec_dir / f"{spec_name}.yaml",
+        clinvar_snapshot_path=clinvar,
+        clinvar_snapshot_date=snapshot_date,
+    )
     rows = [result.row for result in runner.run(variants)]
     typer.echo(f"{runner.gene.gene}: {len(rows):,} rows under {runner.spec.spec_version}")
     typer.echo(f"  {runner.cache.summary()}")

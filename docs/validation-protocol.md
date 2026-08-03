@@ -76,6 +76,37 @@ Cada métrica falha por um motivo diferente e o conserto é diferente:
   depende de quem estava olhando, não só de quanta evidência faltava; um `rho` próximo de zero é
   informativo mas não é, sozinho, uma refutação.
 
+## A série temporal é o passo anterior
+
+O protocolo acima compara o mapa com o que o *campo* fez. O `timeline` compara o mapa consigo mesmo
+em datas distintas, e responde uma pergunta diferente: quantas variantes o próprio mapa moveu, e por
+quê.
+
+```bash
+vus-foresight timeline \
+  2018-01-01=out/T2018/gene=BRCA1/gap_map.parquet \
+  2020-01-01=out/T2020/gene=BRCA1/gap_map.parquet \
+  2024-01-01=out/T2024/gene=BRCA1/gap_map.parquet \
+  --out out/transitions.tsv
+```
+
+Diferenças consecutivas, não todas contra a primeira: a pergunta da §4 é *quando* uma variante se
+moveu e sobre o quê, e colapsar cinco anos num único antes/depois perde exatamente isso.
+
+Cada transição é atribuída pelo tipo de evidência que a causou:
+
+| causa | significado |
+|---|---|
+| `neighbour_evidence` | só critérios semi-intrínsecos se moveram — **nada novo se aprendeu sobre esta variante**; um vizinho foi classificado |
+| `intrinsic_evidence` | frequência, preditor ou ensaio novos |
+| `mixed_evidence` | os dois no mesmo intervalo; não são separáveis |
+| `strength_only` | os mesmos critérios, em força diferente |
+| `spec_change` | nenhum critério se moveu e a classe mudou — foram as regras, não a evidência |
+
+`neighbour_evidence` cruzado com "saiu de VUS" é o achado da §4 em forma computável. Vale notar a
+escala: uma classificação não move uma variante, move o códon inteiro — as que alcançam a mesma
+alteração proteica ganham PS1, o resto do códon ganha PM5.
+
 ## Contrafactual barato
 
 Para responder "quanto valeria ingerir este dataset", rode o mapa duas vezes, uma com o adaptador

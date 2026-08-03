@@ -19,7 +19,7 @@ BRCA1/BRCA2 primeiro, arquitetura gene-agnóstica.
 | 1 | Critérios intrínsecos, PVS1, classes de equivalência, traço completo | **implementada**; concordância com o ENIGMA pendente de dados curados |
 | 2 | Teto, conjuntos mínimos suficientes, `blocking_reason`, relatório `available_uningested` | **implementada** |
 | 5 (parcial) | Classes de equivalência: legibilidade **e** computação — avaliação por assinatura de evidência | **implementada**, 19× |
-| 3 | PS1/PM5 contra snapshot datado do ClinVar | adaptador e critérios implementados; falta o snapshot |
+| 3 | PS1/PM5 contra snapshot datado do ClinVar, recomputação em série temporal | **implementada**; falta o snapshot real |
 | 4 | Protocolo de validação §10 | harness implementado, roda sob demanda |
 | 5 | Segundo gene | testado com gene sintético; adicionar ATM é um YAML |
 
@@ -150,6 +150,47 @@ um caminho de código futuro que busque um campo não declarado falha na hora em
 silenciosamente funde duas variantes que diferem; e perturbar qualquer caminho do footprint tem que
 mudar a assinatura.
 
+### Semi-intrínsecos e o tempo
+
+PS1 e PM5 são os únicos critérios cuja resposta depende do estado de um banco público **numa data**.
+São também os dois mais fáceis de implementar como tautologia, e duas exclusões separam um critério
+de uma:
+
+- **PS1 exclui o registro da própria variante.** Pergunta se *outra* alteração de nucleotídeo que
+  produz a mesma alteração proteica já é patogênica. Uma variante que é ela mesma patogênica no
+  ClinVar satisfazendo PS1 a partir do próprio registro é circular — e fabricaria quatro pontos para
+  toda variante já classificada do gene.
+- **PM5 exclui a mesma alteração proteica** (assunto do PS1) e exige que o vizinho seja **missense**.
+  Um nonsense no mesmo códon é observação de PVS1.
+
+O adaptador reporta `clinvar.self.classification` para proveniência, mas **nenhum critério lê esse
+campo**, e há um teste que garante isso. Classificar porque o ClinVar já classificou tornaria o mapa
+um espelho, não uma medida.
+
+O `timeline` recompõe o mapa contra snapshots datados e atribui cada transição pelo *tipo* de
+evidência que a causou. Demonstrável hoje, sem nenhum dado de referência:
+
+```bash
+vus-foresight selftest --clinvar snapshot_2018.tsv --clinvar-date 2018-01-01 --out T2018.parquet
+vus-foresight selftest --clinvar snapshot_2024.tsv --clinvar-date 2024-01-01 --out T2024.parquet
+vus-foresight timeline 2018-01-01=T2018.parquet 2024-01-01=T2024.parquet
+```
+
+```
+2018-01-01 -> 2024-01-01
+  compared              1,537
+  criteria moved        6
+  class changed         1
+  left VUS              1
+  ... on a neighbour's  1 (no new evidence about the variant itself)
+    c.16A>G p.Arg6Gly        VUS -> LP via PS1
+```
+
+Seis critérios se moveram porque **uma** classificação não move uma variante: move o códon inteiro.
+As que alcançam a mesma alteração proteica ganham PS1; o resto do códon ganha PM5. Nenhuma delas
+teve qualquer evidência gerada sobre si mesma. É essa a observação que justifica separar evidência
+semi-intrínseca de intrínseca — e o diff a distingue de um resultado novo de ensaio.
+
 ### Traço completo, nunca só o veredito
 
 Toda avaliação retorna cada critério testado, aplicado ou não, com a razão. `MISSING` e `False` são
@@ -176,6 +217,12 @@ vus-foresight map --gene config/genes/BRCA1.yaml --data-root data \
 
 # as agregações
 vus-foresight report out/gene=BRCA1/gap_map.parquet
+
+# snapshot datado do ClinVar, e o diff entre duas datas
+vus-foresight clinvar build --source variant_summary.txt.gz \
+  --out data/snapshots/clinvar_2024-01-01.tsv --transcript NM_007294.4
+vus-foresight timeline 2018-01-01=out/T2018/gap_map.parquet \
+                       2024-01-01=out/T2024/gap_map.parquet --out transitions.tsv
 
 # o estudo de validação (§10)
 vus-foresight validate out/gene=BRCA1/gap_map.parquet outcomes.tsv --reference-date 2020-01-01

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from .adapters.tabular import FrequencyAdapter, FunctionalAdapter, PredictorAdapter, SpliceAdapter
@@ -216,25 +216,40 @@ def build_demo_runner(
     *,
     strand: str = "-",
     computed_at: datetime | None = None,
+    clinvar_snapshot_path: str | Path | None = None,
+    clinvar_snapshot_date: date | None = None,
 ) -> tuple[MapRunner, list[Variant]]:
     """A complete, reference-free run: synthetic gene, toy spec, no snapshots.
 
-    Every file-backed adapter is deliberately absent, so the demo shows the map
-    in its most informative state -- almost everything ``NOT_EVALUABLE`` for want
-    of data, which is precisely the picture the ``available_uningested`` report
-    is meant to surface.
+    Every file-backed adapter is deliberately absent by default, so the demo
+    shows the map in its most informative state -- almost everything
+    ``NOT_EVALUABLE`` for want of data, which is precisely the picture the
+    ``available_uningested`` report is meant to surface.
+
+    A ClinVar snapshot may be supplied so that running this twice against
+    different dates and diffing the results demonstrates the section 4
+    observation on a machine with no reference data at all.
     """
+    from .adapters.clinvar import ClinVarSnapshotAdapter
     from .enumeration import EnumerationClass, enumerate_all
 
     synthetic = build_synthetic_gene(strand=strand)
     config = synthetic_gene_config(synthetic)
     spec = load_spec(spec_path)
+    extra = []
+    if clinvar_snapshot_path is not None:
+        extra.append(
+            ClinVarSnapshotAdapter.from_path(
+                clinvar_snapshot_path, snapshot_date=clinvar_snapshot_date
+            )
+        )
     runner = MapRunner(
         transcript=synthetic.transcript,
         gene=config,
         spec=spec,
-        adapters=default_registry(config),
+        adapters=default_registry(config, extra=extra),
         computed_at=computed_at or datetime(1970, 1, 1),
+        clinvar_snapshot=clinvar_snapshot_date,
     )
     variants = list(
         enumerate_all(

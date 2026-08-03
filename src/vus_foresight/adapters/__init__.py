@@ -2,8 +2,13 @@
 
 from .base import Adapter, AdapterRegistry, NullAdapter
 from .builtin import RegionAdapter, TranscriptAdapter, VariantAdapter
+from .clinvar import (
+    ClinVarRecord,
+    ClinVarSnapshot,
+    ClinVarSnapshotAdapter,
+)
+from .clinvar_import import ParseStats, build_snapshot, parse_variant_summary
 from .tabular import (
-    ClinVarAdapter,
     FrequencyAdapter,
     FunctionalAdapter,
     PredictorAdapter,
@@ -14,7 +19,11 @@ from .tabular import (
 __all__ = [
     "Adapter",
     "AdapterRegistry",
-    "ClinVarAdapter",
+    "ClinVarRecord",
+    "ClinVarSnapshot",
+    "ClinVarSnapshotAdapter",
+    "ParseStats",
+    "build_snapshot",
     "FrequencyAdapter",
     "FunctionalAdapter",
     "NullAdapter",
@@ -24,4 +33,5 @@ __all__ = [
     "TableAdapter",
     "TranscriptAdapter",
     "VariantAdapter",
+    "parse_variant_summary",
 ]

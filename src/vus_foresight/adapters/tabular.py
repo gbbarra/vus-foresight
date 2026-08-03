@@ -30,7 +30,6 @@ __all__ = [
     "FrequencyAdapter",
     "PredictorAdapter",
     "FunctionalAdapter",
-    "ClinVarAdapter",
     "SpliceAdapter",
 ]
 
@@ -230,27 +229,8 @@ class FunctionalAdapter(TableAdapter):
         return payload
 
 
-class ClinVarAdapter(TableAdapter):
-    """A dated ClinVar snapshot, for the semi-intrinsic criteria PS1 and PM5.
-
-    Semi-intrinsic evidence is temporally dynamic: a variant can migrate out of
-    VUS without anything new being learned *about it*, purely because a
-    different variant in the same codon got classified. Recomputing against
-    dated snapshots is what makes that visible, and it is the direct hook into
-    ``vus-hindsight``.
-    """
-
-    namespace = "clinvar"
-    name = "clinvar"
-    key_attribute = "hgvs_p"
-
-    def __init__(
-        self,
-        path: str | Path | None,
-        version: str,
-        *,
-        snapshot_date: str | None = None,
-        key_fn: Callable[[Variant, Transcript], str | None] | None = None,
-    ) -> None:
-        super().__init__(path, version, key_fn=key_fn)
-        self.snapshot_date = snapshot_date or version
+# ClinVar deliberately has no TableAdapter subclass. PS1 and PM5 cannot be
+# answered by a single-key lookup: both require excluding the variant's own
+# record, and PM5 additionally requires the neighbouring record to be a
+# missense. A flat table keyed by protein change would let a variant satisfy
+# PS1 from itself. See :mod:`vus_foresight.adapters.clinvar`.
