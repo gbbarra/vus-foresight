@@ -1,0 +1,59 @@
+# BRCA2 -- MANE Select NM_000059.4 / ENST00000380152.8
+#
+# As with BRCA1, exon coordinates and the transcript sequence are imported rather
+# than vendored. See docs/reference-data.md.
+
+gene: BRCA2
+assembly: GRCh38
+spec: enigma_brca_v1.1.0
+
+lof_mechanism: established
+
+transcript:
+  id: NM_000059.4
+  mane_select: true
+  chrom: chr13
+  strand: "+"
+  cds_length: 10257
+  protein_length: 3418
+  exon_count: 27
+  exon_labels: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+                "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23",
+                "24", "25", "26", "27"]
+
+sequence:
+  path: reference/BRCA2_NM_000059.4.fa
+  provenance: >-
+    RefSeq NM_000059.4 spliced transcript, as distributed by MANE.
+
+flanks:
+  path: reference/BRCA2_intronic_flanks.tsv
+  provenance: >-
+    Plus-strand GRCh38 bases for 50 nt on each side of every junction.
+
+intronic_flank_bp: 50
+
+# UNVERIFIED. See the note in BRCA1.yaml.
+functional_regions:
+  - name: PALB2-binding region
+    start_aa: 21
+    end_aa: 39
+    tags: [domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P51587"
+  - name: BRC repeats
+    start_aa: 1002
+    end_aa: 2085
+    tags: [domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P51587"
+  - name: DNA-binding domain
+    start_aa: 2481
+    end_aa: 3186
+    tags: [critical, domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P51587"
+
+mave_datasets: []
+
+notes: >-
+  BRCA2's SGE dataset is separate from and independently calibrated against
+  BRCA1's. Function-score provenance is recorded per variant so a score is never
+  attributed to the wrong assay.

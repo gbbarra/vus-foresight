@@ -1,0 +1,22 @@
+# Reference and snapshot data is never committed: it is large, versioned
+# elsewhere, and pinned by sha256 in the gene configs.
+/data/
+/out/
+
+# Optional curated test fixtures. The golden snapshot IS committed -- it is the
+# audit trail for specification changes.
+/tests/fixtures/clinvar_hgvs_oracle.tsv
+/tests/fixtures/reference_validator_sample.tsv
+/tests/fixtures/enigma_three_star.tsv
+/tests/fixtures/hindsight_outcomes.tsv
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
+.venv/
+venv/

@@ -1,0 +1,332 @@
+# A complete, self-consistent specification for a gene that does not exist.
+#
+# This exists for the domain-isolation test of spec section 11: running the whole
+# suite against a synthetic gene and this specification proves that no BRCA
+# constant has leaked into the engine. Every threshold here is arbitrary and
+# chosen to make the machinery observable, not to be clinically meaningful.
+
+spec_id: toy
+name: Toy specification for engine tests
+version: 0.1.0
+verified: true          # verified as internally consistent; it asserts nothing about biology
+genes: [TOY1, TOY2]
+source: synthetic
+
+point_system:
+  pathogenic_points: {supporting: 1, moderate: 2, strong: 4, very_strong: 8}
+  benign_points: {supporting: -1, moderate: -2, strong: -4, very_strong: -8, stand_alone: -8}
+  threshold_pathogenic: 10
+  threshold_likely_pathogenic: 6
+  threshold_likely_benign: -1
+  threshold_benign: -7
+
+pvs1:
+  enabled: true
+  nmd_triggered_strength: very_strong
+  nmd_triggered_unestablished_strength: strong
+  nmd_escape_critical_strength: strong
+  nmd_escape_large_strength: strong
+  nmd_escape_small_strength: moderate
+  min_fraction_removed: 0.10
+  critical_region_tags: [critical]
+  start_lost_strength: moderate
+  splice_requires_prediction: true
+  splice_prediction_field: splice.ds_max
+  splice_prediction_threshold: 0.5
+  splice_disrupted_strength: very_strong
+
+blocking:
+  conflict_reason: CONFLICTING_INTRINSIC
+  priority:
+    - MISSING_FUNCTIONAL
+    - MISSING_SEGREGATION
+    - MISSING_CASE_CONTROL
+    - PREDICTOR_INDETERMINATE
+    - FREQUENCY_UNINFORMATIVE
+  default: PREDICTOR_INDETERMINATE
+
+equivalence:
+  never_collapse: [missense]
+
+gap:
+  max_cardinality: 4
+  max_sets_per_target: 5
+  include_intractable: false
+
+criteria:
+  # ---------------------------------------------------------------- intrinsic
+  - code: PVS1
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: very_strong
+    applies_to: [nonsense, frameshift, splice_donor, splice_acceptor, start_lost]
+    requires: [pvs1.strength]
+    rule: {field: pvs1.applicable, op: is_true}
+    strength_ladder:
+      - {strength: very_strong, when: {field: pvs1.strength, op: eq, value: very_strong}}
+      - {strength: strong, when: {field: pvs1.strength, op: eq, value: strong}}
+      - {strength: moderate, when: {field: pvs1.strength, op: eq, value: moderate}}
+      - {strength: supporting, when: {field: pvs1.strength, op: eq, value: supporting}}
+    feasibility: available_uningested
+    blocks_as: MISSING_FUNCTIONAL
+    evidence_template: "{pvs1.rationale}"
+    description: Null variant in a gene where loss of function is a disease mechanism
+
+  - code: BA1
+    direction: benign
+    evidence_class: intrinsic
+    strength: stand_alone
+    mutex_group: frequency
+    requires: [frequency.gnomad.faf95_popmax]
+    rule: {field: frequency.gnomad.faf95_popmax, op: ge, value: 0.001}
+    feasibility: available_uningested
+    blocks_as: FREQUENCY_UNINFORMATIVE
+    evidence_template: "gnomAD FAF95 popmax {frequency.gnomad.faf95_popmax} >= 0.001"
+    description: Allele frequency too high for a disease-causing variant
+
+  - code: BS1
+    direction: benign
+    evidence_class: intrinsic
+    strength: strong
+    mutex_group: frequency
+    requires: [frequency.gnomad.faf95_popmax]
+    rule:
+      all:
+        - {field: frequency.gnomad.faf95_popmax, op: ge, value: 0.0001}
+        - {field: frequency.gnomad.faf95_popmax, op: lt, value: 0.001}
+    feasibility: available_uningested
+    blocks_as: FREQUENCY_UNINFORMATIVE
+    evidence_template: "gnomAD FAF95 popmax {frequency.gnomad.faf95_popmax} in [1e-4, 1e-3)"
+    description: Allele frequency greater than expected for the disorder
+
+  - code: PM2_Supporting
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: supporting
+    mutex_group: frequency
+    requires: [frequency.gnomad.faf95_popmax]
+    rule: {field: frequency.gnomad.faf95_popmax, op: le, value: 0.00002}
+    feasibility: available_uningested
+    blocks_as: FREQUENCY_UNINFORMATIVE
+    evidence_template: "gnomAD FAF95 popmax {frequency.gnomad.faf95_popmax} <= 2e-5"
+    description: Absent or at very low frequency in population databases
+
+  - code: PP3
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: supporting
+    mutex_group: computational
+    applies_to: [missense]
+    requires: [predictor.bayesdel]
+    rule: {field: predictor.bayesdel, op: ge, value: 0.30}
+    strength_ladder:
+      - {strength: moderate, when: {field: predictor.bayesdel, op: ge, value: 0.50}}
+    max_plausible_strength: moderate
+    feasibility: available_uningested
+    blocks_as: PREDICTOR_INDETERMINATE
+    evidence_template: "BayesDel {predictor.bayesdel} >= 0.30"
+    description: Computational evidence supports a deleterious effect
+
+  - code: BP4
+    direction: benign
+    evidence_class: intrinsic
+    strength: supporting
+    mutex_group: computational
+    applies_to: [missense]
+    requires: [predictor.bayesdel]
+    rule: {field: predictor.bayesdel, op: le, value: 0.18}
+    feasibility: available_uningested
+    blocks_as: PREDICTOR_INDETERMINATE
+    evidence_template: "BayesDel {predictor.bayesdel} <= 0.18"
+    description: Computational evidence suggests no impact
+
+  - code: PS3
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: strong
+    mutex_group: functional
+    requires: [functional.classification]
+    rule: {field: functional.classification, op: eq, value: abnormal}
+    strength_ladder:
+      - {strength: strong, when: {field: functional.classification, op: eq, value: abnormal}}
+    feasibility: assay_feasible
+    feasibility_ladder:
+      - feasibility: available_uningested
+        when: {field: functional.region_assayed, op: is_true}
+    blocks_as: MISSING_FUNCTIONAL
+    evidence_template: "functional assay {functional.dataset}: {functional.classification}"
+    description: Well-established functional assay shows a damaging effect
+
+  - code: BS3
+    direction: benign
+    evidence_class: intrinsic
+    strength: strong
+    mutex_group: functional
+    requires: [functional.classification]
+    rule: {field: functional.classification, op: eq, value: normal}
+    feasibility: assay_feasible
+    feasibility_ladder:
+      - feasibility: available_uningested
+        when: {field: functional.region_assayed, op: is_true}
+    blocks_as: MISSING_FUNCTIONAL
+    evidence_template: "functional assay {functional.dataset}: {functional.classification}"
+    description: Well-established functional assay shows no damaging effect
+
+  - code: PM1
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: moderate
+    applies_to: [missense, inframe_deletion]
+    requires: [region.tags]
+    rule: {field: region.tags, op: contains_any, value: [hotspot, critical]}
+    feasibility: available_uningested
+    evidence_template: "residue lies in {region.names}"
+    description: Located in a mutational hotspot or a critical functional domain
+
+  - code: PM4
+    direction: pathogenic
+    evidence_class: intrinsic
+    strength: moderate
+    applies_to: [inframe_deletion, inframe_insertion, stop_lost]
+    requires: [region.tags]
+    # "Not in a repeat region" is the absence of a tag on a list-valued field,
+    # not a scalar membership test.
+    rule:
+      none:
+        - {field: region.tags, op: contains_any, value: [repeat]}
+    feasibility: available_uningested
+    description: Protein length change in a non-repeat region
+
+  - code: BP7
+    direction: benign
+    evidence_class: intrinsic
+    strength: supporting
+    applies_to: [synonymous]
+    requires: [splice.ds_max]
+    rule:
+      all:
+        - {field: variant.consequence_terms, op: contains, value: synonymous}
+        - {field: splice.ds_max, op: lt, value: 0.1}
+    feasibility: available_uningested
+    blocks_as: PREDICTOR_INDETERMINATE
+    evidence_template: "synonymous, SpliceAI max {splice.ds_max} < 0.1"
+    description: Synonymous variant with no predicted splice impact
+
+  # ----------------------------------------------------------- semi-intrinsic
+  - code: PS1
+    direction: pathogenic
+    evidence_class: semi_intrinsic
+    strength: strong
+    applies_to: [missense]
+    requires: [clinvar.same_protein_change.classification]
+    rule:
+      field: clinvar.same_protein_change.classification
+      op: in
+      value: [pathogenic, likely_pathogenic]
+    feasibility: available_uningested
+    evidence_template: >-
+      same amino acid change already classified {clinvar.same_protein_change.classification}
+      in ClinVar
+    description: Same amino acid change as an established pathogenic variant
+    notes: Temporally dynamic; always computed against a dated snapshot.
+
+  - code: PM5
+    direction: pathogenic
+    evidence_class: semi_intrinsic
+    strength: moderate
+    applies_to: [missense]
+    requires: [clinvar.codon.other_change_classification]
+    rule:
+      field: clinvar.codon.other_change_classification
+      op: in
+      value: [pathogenic, likely_pathogenic]
+    feasibility: available_uningested
+    evidence_template: >-
+      a different change at this codon is {clinvar.codon.other_change_classification}
+      in ClinVar
+    description: Novel missense at a codon where a different missense is pathogenic
+
+  # --------------------------------------------------------------- extrinsic
+  - code: PS4
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: strong
+    max_plausible_strength: strong
+    feasibility: needs_cases
+    required_observations: {supporting: 3, moderate: 6, strong: 12}
+    blocks_as: MISSING_CASE_CONTROL
+    description: Prevalence in affected individuals significantly increased over controls
+
+  - code: PP1
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: supporting
+    max_plausible_strength: strong
+    feasibility: needs_families
+    required_observations: {supporting: 3, moderate: 5, strong: 7}
+    blocks_as: MISSING_SEGREGATION
+    description: Co-segregation with disease in multiple affected family members
+
+  - code: BS4
+    direction: benign
+    evidence_class: extrinsic
+    strength: strong
+    max_plausible_strength: strong
+    feasibility: needs_families
+    required_observations: {strong: 7}
+    blocks_as: MISSING_SEGREGATION
+    description: Lack of segregation in affected members of a family
+
+  - code: PM3
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: moderate
+    max_plausible_strength: strong
+    feasibility: needs_cases
+    required_observations: {supporting: 1, moderate: 2, strong: 4}
+    blocks_as: MISSING_CASE_CONTROL
+    description: Detected in trans with a pathogenic variant, recessive presentation
+
+  - code: BP2
+    direction: benign
+    evidence_class: extrinsic
+    strength: supporting
+    feasibility: needs_cases
+    blocks_as: MISSING_CASE_CONTROL
+    description: Observed in trans or in cis with a pathogenic variant
+
+  - code: BS2
+    direction: benign
+    evidence_class: extrinsic
+    strength: strong
+    feasibility: needs_cases
+    blocks_as: MISSING_CASE_CONTROL
+    description: Observed in healthy adults with full penetrance expected
+
+  - code: PS2
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: strong
+    feasibility: intractable
+    blocks_as: MISSING_SEGREGATION
+    description: De novo, maternity and paternity confirmed
+    notes: >-
+      Marked intractable for adult-onset hereditary cancer genes: de novo events
+      are not observable in this disease model, so a set requiring one is not a
+      research plan.
+
+  - code: PM6
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: moderate
+    feasibility: intractable
+    blocks_as: MISSING_SEGREGATION
+    description: Assumed de novo, without confirmation of maternity and paternity
+
+  - code: PP4
+    direction: pathogenic
+    evidence_class: extrinsic
+    strength: supporting
+    feasibility: needs_cases
+    blocks_as: MISSING_CASE_CONTROL
+    description: Phenotype highly specific for a disease with a single genetic aetiology
