@@ -65,6 +65,16 @@ class EvidenceContext:
     #: namespace -> "adapter@version", copied into every applied criterion so a
     #: row can be traced back to the exact dataset that produced it.
     sources: dict[str, str] = field(default_factory=dict)
+    #: When set, every :meth:`get` records its path here regardless of whether a
+    #: :class:`LookupLog` was passed.
+    #:
+    #: This exists to make class-level evaluation provably sound rather than
+    #: carefully argued. The cache assumes the specification's declared field
+    #: footprint covers everything an evaluation reads; with the audit on, a test
+    #: can compare what was *actually* read against what was *declared*, and any
+    #: future code path that reaches for an undeclared field fails the suite
+    #: instead of silently merging two variants that differ.
+    audit: set[str] | None = None
 
     def merge(self, namespace: str, payload: dict[str, Any], source: str) -> None:
         """Attach one adapter's output under its own namespace."""
@@ -75,6 +85,8 @@ class EvidenceContext:
 
     def get(self, path: str, log: LookupLog | None = None) -> Any:
         """Resolve a dotted path, returning :data:`MISSING` if any segment is absent."""
+        if self.audit is not None:
+            self.audit.add(path)
         node: Any = self.data
         for segment in path.split("."):
             if isinstance(node, dict) and segment in node:

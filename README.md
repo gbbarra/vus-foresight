@@ -18,6 +18,7 @@ BRCA1/BRCA2 primeiro, arquitetura gene-agnóstica.
 | 0 | Enumeração, anotação, schema, motor de pontos, testes | **implementada** |
 | 1 | Critérios intrínsecos, PVS1, classes de equivalência, traço completo | **implementada**; concordância com o ENIGMA pendente de dados curados |
 | 2 | Teto, conjuntos mínimos suficientes, `blocking_reason`, relatório `available_uningested` | **implementada** |
+| 5 (parcial) | Classes de equivalência: legibilidade **e** computação — avaliação por assinatura de evidência | **implementada**, 19× |
 | 3 | PS1/PM5 contra snapshot datado do ClinVar | adaptador e critérios implementados; falta o snapshot |
 | 4 | Protocolo de validação §10 | harness implementado, roda sob demanda |
 | 5 | Segundo gene | testado com gene sintético; adicionar ATM é um YAML |
@@ -113,6 +114,42 @@ em `FrameshiftEnumeration.unreachable` em vez de emitir classes vazias, e o inva
 - `extrinsic` — exige observação em paciente, família ou coorte; **nunca aplicado por este sistema**,
   apenas listado como o que faltaria
 
+### Classes de equivalência: legibilidade e computação
+
+A §5 promete ganho duplo — um mapa legível por região e menos computação. A metade da legibilidade
+sai de agrupar as linhas prontas. A da computação não sai de graça: uma classe derivada do traço só
+é conhecível depois de pagar pela avaliação.
+
+A **assinatura de evidência** fecha isso. É um digest canônico de todo caminho do contexto que a
+spec é capaz de ler (`VCEPSpec.field_footprint`) mais os `consequence_terms` que os gates
+`applies_to` consultam. Duas variantes com a mesma assinatura não podem avaliar diferente, porque
+não há mais nada para o motor olhar — então avaliação e análise de lacuna são computadas uma vez e
+reusadas.
+
+O que **não** entra na assinatura é a identidade da variante. Duas missense com perfil de evidência
+idêntico compartilham a avaliação e ainda assim recebem `equivalence_class_id` distintos, porque a
+§5 proíbe colapsar missense no *relatório*. Compartilhar a computação e separar o relato são
+perguntas diferentes.
+
+Medido num gene sintético com SNVs codificantes mais MNVs intra-códon, sem adaptadores carregados:
+
+| | tempo | perfis distintos |
+|---|---|---|
+| referência, uma avaliação por variante | 4,19 s | — |
+| por assinatura | 0,22 s | 53 de 2.583 variantes (97,9% reusadas) |
+
+**19×**, com linhas idênticas. Extrapolando para Tier 1+2 completo: BRCA1 de ~222 s para ~12 s,
+BRCA2 de ~400 s para ~21 s. O gargalo era `minimum_sufficient_sets`, 88% do tempo — trabalho
+idêntico entre variantes com o mesmo perfil.
+
+A solidez não é argumentada, é testada de três formas: toda linha produzida com reuso ligado é
+idêntica à do caminho de referência (`--no-reuse-by-signature`), inclusive com todas as fontes
+populadas e variando por variante; o `EvidenceContext` tem modo de auditoria que registra **toda**
+leitura, e um teste exige que o conjunto lido esteja contido no footprint declarado — de modo que
+um caminho de código futuro que busque um campo não declarado falha na hora em que é escrito, e não
+silenciosamente funde duas variantes que diferem; e perturbar qualquer caminho do footprint tem que
+mudar a assinatura.
+
 ### Traço completo, nunca só o veredito
 
 Toda avaliação retorna cada critério testado, aplicado ou não, com a razão. `MISSING` e `False` são
@@ -195,6 +232,12 @@ domínio, e regressão por snapshot dourado versionado — qualquer diff exige j
 
 A concordância em nível de critério com registros três estrelas do ENIGMA e o invariante de
 não-superestimação estão como harness e pulam sem os dados curados.
+
+Um teste de reciprocidade merece nota: o footprint declarado também não pode ser **inflado**. Um
+caminho que ninguém lê ainda entra na assinatura, e só pode separar classes que deveriam ter se
+fundido. Esse teste roda com todas as fontes populadas — porque um caminho que só um
+`evidence_template` renderizado consulta nunca é lido enquanto seu critério está `NOT_EVALUABLE` —
+e de quebra prova que todo critério com regra é alcançável sob algum estado de evidência.
 
 O protocolo da §10 é **estudo de validação**, não teste unitário, e não roda em CI.
 

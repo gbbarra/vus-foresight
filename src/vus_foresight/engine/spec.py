@@ -11,8 +11,10 @@ makes the golden-snapshot regression test of spec section 11 meaningful.
 
 from __future__ import annotations
 
+import re
+from functools import cached_property
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -29,7 +31,13 @@ from ..acmg import (
 from ..variant import Consequence
 from .predicates import RuleNode
 
+#: ``{dotted.path}`` tokens inside an evidence template. Shared with the
+#: evaluator so the footprint and the renderer can never disagree about what
+#: counts as a token.
+TEMPLATE_TOKEN = re.compile(r"\{([A-Za-z0-9_.]+)\}")
+
 __all__ = [
+    "TEMPLATE_TOKEN",
     "StrengthRung",
     "CriterionSpec",
     "PVS1Config",
@@ -132,6 +140,23 @@ class CriterionSpec(BaseModel):
 
     def observations_for(self, strength: Strength) -> int | None:
         return self.required_observations.get(strength)
+
+    def iter_fields(self) -> Iterator[str]:
+        """Every context path this criterion can read, from any of its parts.
+
+        Prerequisites, the rule itself, both ladders, and the evidence template
+        -- the template counts because it is rendered into the output, so two
+        variants that differ only in a templated value are not interchangeable.
+        """
+        yield from self.requires
+        if self.rule is not None:
+            yield from self.rule.iter_fields()
+        for rung in self.strength_ladder:
+            yield from rung.when.iter_fields()
+        for rung in self.feasibility_ladder:
+            yield from rung.when.iter_fields()
+        if self.evidence_template:
+            yield from TEMPLATE_TOKEN.findall(self.evidence_template)
 
 
 class PVS1Config(BaseModel):
@@ -272,6 +297,28 @@ class VCEPSpec(BaseModel):
 
     def points_for(self, criterion: CriterionSpec, strength: Strength) -> int:
         return self.point_system.points_for(criterion.direction, strength)
+
+    @cached_property
+    def field_footprint(self) -> tuple[str, ...]:
+        """Every context path this specification can read, sorted.
+
+        This is the contract behind class-level evaluation: two variants whose
+        contexts agree on all of these paths *cannot* evaluate differently,
+        because there is nothing else for the engine to look at.
+
+        Getting it wrong would silently merge variants that should differ, so it
+        is not left to careful reading of the call sites --
+        ``EvidenceContext.audit`` records every path an evaluation actually
+        touches, and a test asserts the recorded set is contained here.
+        """
+        paths: set[str] = set()
+        for criterion in self.criteria:
+            paths.update(criterion.iter_fields())
+        # Read by the PVS1 tree while the context is being assembled, and by the
+        # evaluator when it explains why PVS1 could not be determined.
+        paths.add(self.pvs1.splice_prediction_field)
+        paths.add("pvs1.undetermined_reason")
+        return tuple(sorted(paths))
 
 
 def load_spec(path: str | Path) -> VCEPSpec:

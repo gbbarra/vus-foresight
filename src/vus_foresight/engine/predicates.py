@@ -13,7 +13,7 @@ never accidentally fire because data was not loaded.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -116,6 +116,19 @@ class RuleNode(BaseModel):
                 f"a rule node needs exactly one of all/any/none/leaf, got {set_fields}"
             )
         return self
+
+    def iter_fields(self) -> "Iterator[str]":
+        """Every context path this subtree can read.
+
+        Used to compute a specification's field footprint, which is what makes
+        class-level evaluation sound: two variants agreeing on every path the
+        spec can read must evaluate identically.
+        """
+        if self.leaf is not None:
+            yield self.leaf.field
+            return
+        for child in self.all or self.any or self.none or ():
+            yield from child.iter_fields()
 
     def evaluate(self, context: EvidenceContext, log: LookupLog) -> bool:
         if self.leaf is not None:

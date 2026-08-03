@@ -142,6 +142,13 @@ def map_command(
     allow_unverified: bool = typer.Option(
         False, help="Write a map from a specification whose thresholds are uncurated."
     ),
+    reuse_by_signature: bool = typer.Option(
+        True,
+        help=(
+            "Evaluate once per distinct evidence profile instead of once per variant. "
+            "Turn off to run the reference implementation."
+        ),
+    ),
 ) -> None:
     """Compute the gap map for one gene and write it to Parquet."""
     config, spec, transcript, flanks = _load(gene, spec_dir, data_root)
@@ -202,6 +209,7 @@ def map_command(
         computed_at=stamp,
         clinvar_snapshot=date.fromisoformat(clinvar_date) if clinvar_date else None,
         gnomad_version=gnomad_version if frequency is not None else None,
+        reuse_by_signature=reuse_by_signature,
     )
 
     variants = list(
@@ -217,6 +225,8 @@ def map_command(
     sequence_path = out_dir / f"gene={config.gene}" / "gap_map.parquet"
     write_parquet(rows, sequence_path)
     typer.echo(f"wrote {len(rows):,} sequence-level rows to {sequence_path}")
+    if reuse_by_signature:
+        typer.echo(f"  evaluated {runner.cache.summary()}")
 
     if EnumerationClass.EXON_CNV in classes:
         cnv_config = CNVScoringConfig()
@@ -391,6 +401,7 @@ def selftest(
     runner, variants = build_demo_runner(spec_dir / f"{spec_name}.yaml")
     rows = [result.row for result in runner.run(variants)]
     typer.echo(f"{runner.gene.gene}: {len(rows):,} rows under {runner.spec.spec_version}")
+    typer.echo(f"  {runner.cache.summary()}")
     counts: dict[str, int] = {}
     for row in rows:
         counts[row.blocking_reason.value] = counts.get(row.blocking_reason.value, 0) + 1

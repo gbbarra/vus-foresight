@@ -25,6 +25,7 @@ from .equivalence import equivalence_class_id
 from .evaluator import Evaluation, evaluate_variant
 from .gap import GapAnalysis, analyse_gap
 from .pvs1 import PVS1_NAMESPACE, compute_pvs1
+from .signature import SignatureCache, evidence_signature
 from .spec import VCEPSpec
 
 __all__ = ["MapRunner", "VariantResult"]
@@ -52,7 +53,18 @@ class MapRunner:
     computed_at: datetime
     clinvar_snapshot: date | None = None
     gnomad_version: str | None = None
+    #: Evaluate once per distinct evidence profile instead of once per variant
+    #: (spec section 5). Turning it off is not a fallback -- it is the reference
+    #: implementation the cache is tested against.
+    reuse_by_signature: bool = True
+    #: Record every context path an evaluation reads, so a test can prove the
+    #: specification's declared footprint is complete. Off by default: it costs
+    #: a set insertion per lookup and is only meaningful under test.
+    audit_context_reads: bool = False
+    cache: SignatureCache = field(default_factory=SignatureCache)
     _extra_sources: dict[str, str] = field(default_factory=dict)
+    #: Union of every context path read, when auditing is on.
+    audited_paths: set[str] = field(default_factory=set)
 
     def build_context(self, variant: Variant) -> EvidenceContext:
         """Merge every adapter's view, then derive PVS1 from the result.
@@ -61,7 +73,9 @@ class MapRunner:
         an adapter supplies; deriving it first would make the tree blind to the
         very data whose absence it is supposed to report.
         """
-        context = EvidenceContext()
+        context = EvidenceContext(
+            audit=self.audited_paths if self.audit_context_reads else None
+        )
         for adapter in self.adapters:
             context.merge(
                 adapter.namespace, adapter.lookup(variant, self.transcript), adapter.source_id
@@ -73,10 +87,31 @@ class MapRunner:
         )
         return context
 
+    def _assess(
+        self, variant: Variant, context: EvidenceContext
+    ) -> tuple[Evaluation, GapAnalysis]:
+        """Evaluate and analyse, reusing the result across identical profiles.
+
+        The reuse is exact rather than approximate: the signature covers every
+        context path the specification is able to read, so a hit means the
+        engine had no input on which the two variants differ.
+        """
+        if not self.reuse_by_signature:
+            evaluation = evaluate_variant(variant, context, self.spec)
+            return evaluation, analyse_gap(evaluation, self.spec, context)
+
+        signature = evidence_signature(variant, context, self.spec.field_footprint)
+        cached = self.cache.get(signature)
+        if cached is not None:
+            return cached
+        evaluation = evaluate_variant(variant, context, self.spec)
+        entry = (evaluation, analyse_gap(evaluation, self.spec, context))
+        self.cache.put(signature, entry)
+        return entry
+
     def evaluate(self, variant: Variant) -> VariantResult:
         context = self.build_context(variant)
-        evaluation = evaluate_variant(variant, context, self.spec)
-        gap = analyse_gap(evaluation, self.spec, context)
+        evaluation, gap = self._assess(variant, context)
         row = GapMapRow(
             gene=variant.gene,
             transcript=variant.transcript,
