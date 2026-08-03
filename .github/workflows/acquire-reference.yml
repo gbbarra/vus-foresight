@@ -199,7 +199,12 @@ jobs:
             echo "::group::$f"; cat "$f"; echo "::endgroup::"
           done
 
+      # Published even when a later step flagged something. The cardinality
+      # verification is the gate that must block; a coverage warning from
+      # 'data check' should be visible without costing the artifact that would
+      # let somebody diagnose it.
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: vus-foresight-reference
           path: |
