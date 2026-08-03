@@ -20,7 +20,7 @@ import pytest
 
 from vus_foresight.engine.pipeline import MapRunner, default_registry
 from vus_foresight.enumeration import EnumerationClass, enumerate_all
-from vus_foresight.output import rows_to_frame, write_parquet
+from vus_foresight.output import read_rows, rows_to_frame, write_parquet
 
 GOLDEN = Path(__file__).resolve().parents[1] / "fixtures" / "golden"
 GOLDEN_FILE = GOLDEN / "toy_minus_gap_map.tsv"
@@ -56,11 +56,18 @@ def _rows(minus_gene, minus_config, toy_spec, limit: int | None = None):
 def test_two_runs_produce_byte_identical_parquet(
     tmp_path, minus_gene, minus_config, toy_spec
 ):
-    first = write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), tmp_path / "a.parquet")
-    second = write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), tmp_path / "b.parquet")
-    digest_a = hashlib.sha256(first.read_bytes()).hexdigest()
-    digest_b = hashlib.sha256(second.read_bytes()).hexdigest()
-    assert digest_a == digest_b
+    first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
+    write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), first)
+    write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), second)
+    assert hashlib.sha256(first.read_bytes()).hexdigest() == (
+        hashlib.sha256(second.read_bytes()).hexdigest()
+    )
+
+    # Batching decides row-group boundaries, so a different batch size is a
+    # different file. Determinism is per configuration, not across it.
+    third = tmp_path / "c.parquet"
+    write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), third, batch_size=64)
+    assert read_rows(third) == read_rows(first)
 
 
 def test_row_order_follows_the_enumerator_not_a_set(minus_gene, minus_config, toy_spec):

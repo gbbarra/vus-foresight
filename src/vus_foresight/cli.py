@@ -258,19 +258,19 @@ def map_command(
         reuse_by_signature=reuse_by_signature,
     )
 
-    variants = list(
-        enumerate_all(
-            transcript,
-            classes=tuple(classes),
-            flanks=flanks,
-            flank_bp=config.intronic_flank_bp,
-        )
+    # Streamed, not materialised. Every row carries its full evaluation trace,
+    # so holding a whole gene's worth in memory before writing needs tens of
+    # gigabytes -- measured, on real BRCA1, before this was a generator.
+    variants = enumerate_all(
+        transcript,
+        classes=tuple(classes),
+        flanks=flanks,
+        flank_bp=config.intronic_flank_bp,
     )
-    rows = [result.row for result in runner.run(variants)]
     out_dir.mkdir(parents=True, exist_ok=True)
     sequence_path = out_dir / f"gene={config.gene}" / "gap_map.parquet"
-    write_parquet(rows, sequence_path)
-    typer.echo(f"wrote {len(rows):,} sequence-level rows to {sequence_path}")
+    written = write_parquet((result.row for result in runner.run(variants)), sequence_path)
+    typer.echo(f"wrote {written:,} sequence-level rows to {sequence_path}")
     if reuse_by_signature:
         typer.echo(f"  evaluated {runner.cache.summary()}")
 

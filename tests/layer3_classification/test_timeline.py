@@ -315,14 +315,14 @@ def test_transitions_survive_a_parquet_round_trip(
         later,
     )
 
-    before_path = write_parquet(
-        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty),
-        tmp_path / "before.parquet",
-    )
-    after_path = write_parquet(
-        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later),
-        tmp_path / "after.parquet",
-    )
+    before_path = tmp_path / "before.parquet"
+    after_path = tmp_path / "after.parquet"
+    assert write_parquet(
+        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path
+    ) == len(variants)
+    assert write_parquet(
+        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later), after_path
+    ) == len(variants)
 
     in_memory = compare_maps(
         _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty),
@@ -346,5 +346,6 @@ def test_parquet_round_trip_preserves_every_field(
     from vus_foresight.output import read_rows, write_parquet
 
     original = _map(minus_gene, minus_config, toy_spec, missense_variants[:25])
-    path = write_parquet(original, tmp_path / "roundtrip.parquet")
+    path = tmp_path / "roundtrip.parquet"
+    assert write_parquet(original, path) == len(original)
     assert read_rows(path) == original

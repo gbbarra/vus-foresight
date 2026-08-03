@@ -502,7 +502,8 @@ def test_the_end_to_end_command_path(
     )
 
     rows = _map(minus_gene, minus_config, toy_spec, variants)
-    map_path = write_parquet(rows, tmp_path / "map.parquet")
+    map_path = tmp_path / "map.parquet"
+    write_parquet(rows, map_path)
 
     study = run_time_series_study(
         read_rows(map_path),

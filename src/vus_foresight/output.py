@@ -15,7 +15,7 @@ process in the loop.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Iterator, Sequence
 
 import polars as pl
 
@@ -41,6 +41,7 @@ from .variant import Consequence, VariantKind
 
 __all__ = [
     "GAP_MAP_SCHEMA",
+    "PARQUET_BATCH_SIZE",
     "rows_to_frame",
     "rows_from_frame",
     "read_rows",
@@ -210,18 +211,71 @@ def rows_to_frame(rows: Iterable[GapMapRow]) -> pl.DataFrame:
     return frame.select(list(GAP_MAP_COLUMNS))
 
 
-def write_parquet(rows: Iterable[GapMapRow], path: str | Path) -> Path:
-    """Write a gap map partition.
+#: Rows converted per Parquet row group.
+#:
+#: Every row carries its complete evaluation trace -- two dozen nested criterion
+#: structs plus the sufficient sets -- which is the design (spec section 1: the
+#: trace *is* the map) and also makes rows expensive to materialise. Measured on
+#: real BRCA1: 16,776 rows cost 3.1 GB to convert in one shot, so the full tier
+#: 1+2 enumeration would need roughly 25 GB and simply dies. Batching caps the
+#: conversion at a few hundred megabytes regardless of gene size.
+#:
+#: Fixed rather than tuned, because the batch boundary decides the row-group
+#: boundary, and the determinism guarantee compares bytes.
+PARQUET_BATCH_SIZE = 2000
 
-    ``statistics=False`` is not an optimisation: min/max statistics embed
+
+def _batched(rows: Iterable[GapMapRow], size: int) -> Iterator[list[GapMapRow]]:
+    batch: list[GapMapRow] = []
+    for row in rows:
+        batch.append(row)
+        if len(batch) >= size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+def write_parquet(
+    rows: Iterable[GapMapRow], path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE
+) -> int:
+    """Stream a gap map partition to Parquet, returning the number of rows.
+
+    Takes an iterable and never holds more than one batch of converted rows, so
+    a whole-gene map does not have to fit in memory at once.
+
+    ``write_statistics=False`` is not an optimisation: min/max statistics embed
     per-row-group values whose encoding has varied between writer versions, and
     the determinism test compares bytes.
     """
+    import pyarrow.parquet as pq
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    frame = rows_to_frame(rows)
-    frame.write_parquet(path, compression="zstd", statistics=False)
-    return path
+
+    writer: "pq.ParquetWriter | None" = None
+    written = 0
+    try:
+        for batch in _batched(rows, batch_size):
+            table = rows_to_frame(batch).to_arrow()
+            if writer is None:
+                writer = pq.ParquetWriter(
+                    path, table.schema, compression="zstd", write_statistics=False
+                )
+            writer.write_table(table)
+            written += len(batch)
+        if writer is None:
+            # An empty map is still a valid answer, and it must carry the schema
+            # so a downstream read of several genes does not change type.
+            table = rows_to_frame([]).to_arrow()
+            writer = pq.ParquetWriter(
+                path, table.schema, compression="zstd", write_statistics=False
+            )
+            writer.write_table(table)
+    finally:
+        if writer is not None:
+            writer.close()
+    return written
 
 
 def read_parquet(path: str | Path) -> pl.DataFrame:
