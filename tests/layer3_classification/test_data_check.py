@@ -22,9 +22,40 @@ def _sample(gene, size=40):
     return list(enumerate_coding_snvs(gene.transcript))[:size]
 
 
-def test_a_gene_without_imported_coordinates_reports_the_next_command():
+def test_a_gene_with_pinned_coordinates_but_no_sequence_says_which_is_missing():
+    """BRCA1's exon coordinates are committed; its transcript sequence may not be.
+
+    The two are separate failures with separate fixes, and the report has to
+    distinguish them: coordinates come from 'reference from-mane', the sequence
+    is a file the acquisition run puts on disk.
+    """
     config = load_gene_config(CONFIG_DIR / "genes" / "BRCA1.yaml")
+    assert config.transcript.has_coordinates
     status = check_reference(config, data_root=DATA_ROOT)
+    if status.present:
+        assert status.records == 23
+        assert "strand -" in (status.detail or "")
+    else:
+        assert "sequence" in (status.detail or "")
+        assert "reference import" not in (status.detail or "")
+
+
+def test_a_gene_without_coordinates_points_at_the_import_command(tmp_path, minus_config):
+    from vus_foresight.genome.reference import TranscriptConfig
+
+    stripped = minus_config.model_copy(
+        update={
+            "transcript": TranscriptConfig(
+                id=minus_config.transcript.id,
+                chrom=minus_config.transcript.chrom,
+                strand=minus_config.transcript.strand,
+                cds_length=minus_config.transcript.cds_length,
+                protein_length=minus_config.transcript.protein_length,
+                exon_count=minus_config.transcript.exon_count,
+            )
+        }
+    )
+    status = check_reference(stripped, data_root=tmp_path)
     assert not status.present
     assert "reference import" in (status.detail or "")
 

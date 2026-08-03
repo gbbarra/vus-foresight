@@ -17,7 +17,7 @@ from vus_foresight.testing import build_synthetic_gene, synthetic_gene_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "config"
-DATA_ROOT = REPO_ROOT / "data"
+DATA_ROOT = REPO_ROOT
 
 
 @pytest.fixture(scope="session")

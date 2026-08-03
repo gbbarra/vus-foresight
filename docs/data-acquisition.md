@@ -260,7 +260,7 @@ curadoria não bloqueia nenhum teste.
 ## Verificar o que foi materializado
 
 ```bash
-vus-foresight data check --gene config/genes/BRCA1.yaml --data-root data
+vus-foresight data check --gene config/genes/BRCA1.yaml 
 ```
 
 Reporta, por fonte: presente ou não, versão declarada, número de registros, e quanto da região do

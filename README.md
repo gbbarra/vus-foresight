@@ -210,11 +210,10 @@ relatório `available_uningested`.
 
 ```bash
 # quantas variantes existem
-vus-foresight enumerate --gene config/genes/BRCA1.yaml --data-root data
+vus-foresight enumerate --gene config/genes/BRCA1.yaml
 
 # o mapa
-vus-foresight map --gene config/genes/BRCA1.yaml --data-root data \
-  --frequency data/snapshots/gnomad_v4_brca1.tsv \
+vus-foresight map --gene config/genes/BRCA1.yaml   --frequency data/snapshots/gnomad_v4_brca1.tsv \
   --predictor data/snapshots/dbnsfp_brca1.tsv \
   --splice    data/snapshots/spliceai_brca1.tsv \
   --functional data/snapshots/sge_brca1.tsv \
@@ -231,8 +230,7 @@ vus-foresight timeline 2018-01-01=out/T2018/gap_map.parquet \
                        2024-01-01=out/T2024/gap_map.parquet --out transitions.tsv
 
 # o que já foi materializado, e quanto do gene cobre
-vus-foresight data check --gene config/genes/BRCA1.yaml --data-root data \
-  --frequency data/snapshots/gnomad_v4_brca1.tsv
+vus-foresight data check --gene config/genes/BRCA1.yaml   --frequency data/snapshots/gnomad_v4_brca1.tsv
 
 # o estudo de validação (§10), sem tabela externa de desfechos
 vus-foresight validate \

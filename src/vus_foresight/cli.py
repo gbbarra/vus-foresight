@@ -112,7 +112,7 @@ def _load(gene_path: Path, spec_dir: Path, data_root: Path):
 @app.command("enumerate")
 def enumerate_command(
     gene: Path = typer.Option(..., help="Path to a gene YAML."),
-    data_root: Path = typer.Option(Path("data"), help="Root for reference resources."),
+    data_root: Path = typer.Option(Path("."), help="Root for reference resources."),
     out: Optional[Path] = typer.Option(None, help="Write the enumerated variants as TSV."),
 ) -> None:
     """Count and optionally dump every possible variant for a gene.
@@ -156,7 +156,7 @@ def enumerate_command(
 @app.command("map")
 def map_command(
     gene: Path = typer.Option(..., help="Path to a gene YAML."),
-    data_root: Path = typer.Option(Path("data")),
+    data_root: Path = typer.Option(Path(".")),
     spec_dir: Path = typer.Option(Path("config/specs")),
     out_dir: Path = typer.Option(Path("out"), help="Directory for the Parquet output."),
     frequency: Optional[Path] = typer.Option(None, help="gnomAD/ABraOM snapshot TSV."),
@@ -516,7 +516,7 @@ def validate_command(
 @data_app.command("check")
 def data_check(
     gene: Path = typer.Option(..., help="Path to a gene YAML."),
-    data_root: Path = typer.Option(Path("data")),
+    data_root: Path = typer.Option(Path(".")),
     spec_dir: Path = typer.Option(Path("config/specs")),
     frequency: Optional[Path] = typer.Option(None),
     predictor: Optional[Path] = typer.Option(None),
