@@ -165,6 +165,130 @@ def test_enumeration_is_complete_without_flanks(minus_gene):
     assert all(v.attributes.get("reference_base_unknown") == "true" for v in variants)
 
 
+CURATED = """\
+# BRCA1 is on the minus strand: exon coordinates descend in transcript order.
+gene: TOY1
+assembly: TOY
+spec: toy_v0.1.0
+lof_mechanism: established
+transcript:
+  id: {transcript_id}
+  chrom: {chrom}
+  strand: '{strand}'          # not sorted; transcript order is the truth
+  cds_length: {cds_length}
+  protein_length: {protein_length}
+  exon_count: {exon_count}
+  # Exon 4 is absent from the reference numbering, hence labels as strings.
+  exon_labels: {exon_labels}
+sequence:
+  path: TOY1.fa
+  provenance: synthetic
+notes: |
+  Legacy numbering is never accepted implicitly.
+"""
+
+
+def _curated_config(tmp_path, gene, name="TOY1"):
+    transcript = gene.transcript
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(
+        CURATED.format(
+            transcript_id=transcript.transcript_id,
+            chrom=transcript.chrom,
+            strand=transcript.strand,
+            cds_length=transcript.cds_length,
+            protein_length=transcript.protein_length,
+            exon_count=len(transcript.exons),
+            exon_labels="[" + ", ".join(f"'{e.label}'" for e in transcript.exons) + "]",
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_write_back_preserves_the_curation_comments(tmp_path, minus_gene):
+    """The gene config is documentation as much as data.
+
+    Reserialising it deletes every comment, and the notes it deletes are exactly
+    the ones that stop the next reader from "fixing" a descending exon list.
+    """
+    fasta, exons = _write_resources(tmp_path, minus_gene)
+    config_path = _curated_config(tmp_path, minus_gene)
+
+    import_reference(
+        load_gene_config(config_path),
+        sequence_path=fasta,
+        exon_table_path=exons,
+        config_path=config_path,
+    )
+    written = config_path.read_text(encoding="utf-8")
+
+    assert "# BRCA1 is on the minus strand" in written
+    assert "# Exon 4 is absent from the reference numbering" in written
+    assert "transcript order is the truth" in written
+    assert "provenance: synthetic" in written
+    assert "Legacy numbering is never accepted implicitly." in written
+
+    # And the derived keys are actually there, read back by the real loader.
+    rebuilt = build_transcript(load_gene_config(config_path), data_root=tmp_path)
+    assert rebuilt.exons == minus_gene.transcript.exons
+    assert rebuilt.cds == minus_gene.transcript.cds
+
+
+def test_write_back_is_idempotent(tmp_path, minus_gene):
+    fasta, exons = _write_resources(tmp_path, minus_gene)
+    config_path = _curated_config(tmp_path, minus_gene)
+
+    def run():
+        import_reference(
+            load_gene_config(config_path),
+            sequence_path=fasta,
+            exon_table_path=exons,
+            config_path=config_path,
+        )
+        return config_path.read_text(encoding="utf-8")
+
+    first = run()
+    assert run() == first, "a second import must not churn the file"
+
+
+def test_write_back_replaces_a_stale_exon_list_rather_than_appending(
+    tmp_path, minus_gene
+):
+    from vus_foresight.genome.importer import splice_derived
+
+    fasta, exons = _write_resources(tmp_path, minus_gene)
+    config_path = _curated_config(tmp_path, minus_gene)
+    block = import_reference(
+        load_gene_config(config_path),
+        sequence_path=fasta,
+        exon_table_path=exons,
+        config_path=config_path,
+    )
+    stale = config_path.read_text(encoding="utf-8").replace("start: ", "start: 1", 1)
+    respliced = yaml.safe_load(splice_derived(stale, block))
+    assert respliced["transcript"]["exons"] == block["exons"]
+    assert len(respliced["transcript"]["exons"]) == len(minus_gene.transcript.exons)
+
+
+def test_splice_refuses_a_layout_it_cannot_edit_safely(tmp_path, minus_gene):
+    """Silently reserialising would be worse than failing."""
+    from vus_foresight.genome.importer import ImportedReference, splice_derived
+
+    block = ImportedReference(
+        {
+            "cds_start_tx": 4,
+            "cds_end_tx": 9,
+            "exons": [{"label": "1", "start": 1, "end": 12}],
+            "sequence_sha256": "abc",
+            "sequence_length": 12,
+        }
+    )
+    # A flow mapping is valid YAML and outside what a line splice can edit.
+    with pytest.raises(ReferenceUnavailable, match="could not be spliced"):
+        splice_derived("transcript: {id: NM_1.1, exon_count: 1}\n", block)
+
+
 def test_read_fasta_refuses_a_multi_record_file(tmp_path):
     path = tmp_path / "two.fa"
     path.write_text(">a\nACGT\n>b\nTGCA\n", encoding="ascii")
