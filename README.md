@@ -20,7 +20,7 @@ BRCA1/BRCA2 primeiro, arquitetura gene-agnóstica.
 | 2 | Teto, conjuntos mínimos suficientes, `blocking_reason`, relatório `available_uningested` | **implementada** |
 | 5 (parcial) | Classes de equivalência: legibilidade **e** computação — avaliação por assinatura de evidência | **implementada**, 19× |
 | 3 | PS1/PM5 contra snapshot datado do ClinVar, recomputação em série temporal | **implementada**; falta o snapshot real |
-| 4 | Protocolo de validação §10 | harness implementado, roda sob demanda |
+| 4 | Protocolo de validação §10 | **implementada**, roda sobre a própria série temporal, sem tabela externa |
 | 5 | Segundo gene | testado com gene sintético; adicionar ATM é um YAML |
 
 Duas coisas ainda **não** estão no repositório, e é deliberado:
@@ -224,9 +224,24 @@ vus-foresight clinvar build --source variant_summary.txt.gz \
 vus-foresight timeline 2018-01-01=out/T2018/gap_map.parquet \
                        2024-01-01=out/T2024/gap_map.parquet --out transitions.tsv
 
-# o estudo de validação (§10)
-vus-foresight validate out/gene=BRCA1/gap_map.parquet outcomes.tsv --reference-date 2020-01-01
+# o que já foi materializado, e quanto do gene cobre
+vus-foresight data check --gene config/genes/BRCA1.yaml --data-root data \
+  --frequency data/snapshots/gnomad_v4_brca1.tsv
+
+# o estudo de validação (§10), sem tabela externa de desfechos
+vus-foresight validate \
+  --map-at-t out/T2018/gene=BRCA1/gap_map.parquet \
+  --map-at-t-plus-n out/T2024/gene=BRCA1/gap_map.parquet \
+  --clinvar-at-t data/snapshots/clinvar_2018-01-01.tsv \
+  --clinvar-at-t-plus-n data/snapshots/clinvar_2024-01-01.tsv \
+  --reference-date 2018-01-01
 ```
+
+A verdade-terreno da §10 já está nos snapshots, e por uma propriedade do desenho:
+`clinvar.self.classification` é publicada pelo adaptador e **lida por nenhum critério**, com teste
+que garante. O oráculo mora nos mesmos arquivos que o motor consome, isolado por construção daquilo
+que mede. Ver [`docs/validation-protocol.md`](docs/validation-protocol.md) e, para obter as fontes,
+[`docs/data-acquisition.md`](docs/data-acquisition.md).
 
 Consultável direto por DuckDB:
 

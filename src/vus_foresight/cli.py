@@ -62,6 +62,8 @@ reference_app = typer.Typer(help="Manage MANE Select reference resources.")
 app.add_typer(reference_app, name="reference")
 clinvar_app = typer.Typer(help="Build dated ClinVar snapshots for PS1 and PM5.")
 app.add_typer(clinvar_app, name="clinvar")
+data_app = typer.Typer(help="Inspect the external snapshots. See docs/data-acquisition.md.")
+app.add_typer(data_app, name="data")
 
 #: Determinism: the default stamp is a fixed epoch, not the wall clock. A run
 #: that wants a real timestamp must say so, because two runs that differ only in
@@ -323,37 +325,170 @@ def reference_import(
 
 @app.command("validate")
 def validate_command(
-    parquet: Path = typer.Argument(..., help="A gap map computed with the evidence of date T."),
-    outcomes: Path = typer.Argument(..., help="TSV of what ClinVar recorded by T+n."),
+    map_at_t: Path = typer.Option(
+        ..., "--map-at-t", help="Gap map computed with the evidence state of date T."
+    ),
+    map_at_t_plus_n: Optional[Path] = typer.Option(
+        None,
+        "--map-at-t-plus-n",
+        help=(
+            "Gap map recomputed at T+n. With it, metric 2 comes from the map's own "
+            "time series and no curated outcome table is needed."
+        ),
+    ),
+    clinvar_at_t: Optional[Path] = typer.Option(
+        None, help="ClinVar snapshot at T. The ground truth, which no criterion reads."
+    ),
+    clinvar_at_t_plus_n: Optional[Path] = typer.Option(None, help="ClinVar snapshot at T+n."),
+    outcomes: Optional[Path] = typer.Option(
+        None,
+        help=(
+            "Curated outcome table. Takes precedence over the snapshots: somebody "
+            "who read the submission records knows what the sources cannot say."
+        ),
+    ),
+    spec_dir: Path = typer.Option(Path("config/specs")),
+    spec_name: Optional[str] = typer.Option(
+        None, help="Specification id, defaulting to the one recorded in the map."
+    ),
     reference_date: Optional[str] = typer.Option(
         None, help="ISO date T, for the temporal calibration metric."
     ),
-    show_misses: int = typer.Option(10, help="How many unexplained resolutions to list."),
+    min_stars: int = typer.Option(
+        1, help="Review-status floor for a ClinVar record to count as ground truth."
+    ),
+    show: int = typer.Option(10, help="How many example variants to list per section."),
 ) -> None:
-    """Run the section 10 protocol against vus-hindsight outcomes.
+    """Run the section 10 protocol.
 
     This is a validation study, not a test. It answers whether the map's claim is
     true: did the variants it called resolvable get resolved, for the reasons it
     predicted, in the direction it pointed, in the order it implied?
-    """
-    from .validation import read_outcomes, validate as run_validation
 
-    rows = read_rows(parquet)
-    result = run_validation(
-        rows,
-        read_outcomes(outcomes),
-        reference_date=date.fromisoformat(reference_date) if reference_date else None,
-    )
-    typer.echo(result.summary())
+    Two modes. With a curated outcome table, it runs exactly as section 10
+    describes. With two maps and two ClinVar snapshots it runs with no external
+    table at all, because the ground truth is already there:
+    ``clinvar.self.classification`` is published by the adapter and read by no
+    criterion, so the oracle sits in the same snapshots the engine consumes and
+    is firewalled from what is being measured.
+    """
+    from .adapters.clinvar import ClinVarSnapshot
+    from .validation import read_outcomes, run_time_series_study
+    from .validation import validate as run_validation
+
+    rows = read_rows(map_at_t)
+    when = date.fromisoformat(reference_date) if reference_date else None
+    curated = read_outcomes(outcomes) if outcomes is not None else None
+
+    time_series = map_at_t_plus_n is not None and clinvar_at_t is not None
+    if not time_series:
+        if curated is None:
+            raise typer.BadParameter(
+                "supply either --outcomes, or --map-at-t-plus-n with --clinvar-at-t "
+                "and --clinvar-at-t-plus-n"
+            )
+        result = run_validation(rows, curated, reference_date=when)
+        study = None
+    else:
+        if clinvar_at_t_plus_n is None:
+            raise typer.BadParameter("--clinvar-at-t-plus-n is required in time-series mode")
+        spec_id = spec_name or rows[0].spec_version.split("@")[0]
+        candidates = sorted(spec_dir.glob(f"{spec_id}*.yaml"))
+        if not candidates:
+            raise typer.BadParameter(f"no specification matching {spec_id!r} in {spec_dir}")
+        study = run_time_series_study(
+            rows,
+            read_rows(map_at_t_plus_n),
+            ClinVarSnapshot.read(clinvar_at_t),
+            ClinVarSnapshot.read(clinvar_at_t_plus_n),
+            load_spec(candidates[0]),
+            transcript_id=rows[0].transcript,
+            reference_date=when,
+            min_stars=min_stars,
+            curated_outcomes=curated,
+        )
+        result = study.result
+
+    typer.echo(study.summary() if study is not None else result.summary())
+
     if result.misses:
         typer.echo(f"\n{len(result.misses)} resolution(s) the map did not anticipate:")
-        for line in result.misses[:show_misses]:
+        for line in result.misses[:show]:
             typer.echo(f"  {line}")
     if result.cause_confusion:
-        typer.echo("\npredicted blocking_reason -> observed evidence type:")
+        typer.echo("\npredicted blocking_reason -> evidence that actually arrived:")
         for (predicted, observed), count in sorted(result.cause_confusion.items()):
             marker = "  " if predicted == observed else "! "
             typer.echo(f"  {marker}{predicted:28s} {observed:28s} {count:>6,}")
+    if study is not None and study.unmoved:
+        typer.echo(
+            f"\n{len(study.unmoved)} resolved in ClinVar but not moved here "
+            "(evidence never became public data, or a source is missing):"
+        )
+        for variant_id in study.unmoved[:show]:
+            typer.echo(f"  {variant_id}")
+    if study is not None and study.ahead_of_clinvar:
+        typer.echo(
+            f"\n{len(study.ahead_of_clinvar)} moved here and not yet in the archive "
+            "-- these are the map's live predictions:"
+        )
+        for variant_id in study.ahead_of_clinvar[:show]:
+            typer.echo(f"  {variant_id}")
+
+
+@data_app.command("check")
+def data_check(
+    gene: Path = typer.Option(..., help="Path to a gene YAML."),
+    data_root: Path = typer.Option(Path("data")),
+    spec_dir: Path = typer.Option(Path("config/specs")),
+    frequency: Optional[Path] = typer.Option(None),
+    predictor: Optional[Path] = typer.Option(None),
+    splice: Optional[Path] = typer.Option(None),
+    functional: Optional[Path] = typer.Option(None),
+    clinvar: Optional[Path] = typer.Option(None),
+    sample: int = typer.Option(500, help="Variants to sample when measuring coverage."),
+) -> None:
+    """Report what has been materialised, and how much of the gene it covers.
+
+    Presence is not the useful question. A snapshot built against the wrong
+    transcript version is empty, and a region slice with the wrong coordinates
+    covers nothing -- both look exactly like "this variant has no data" once
+    they reach the engine, which is why this runs before a map rather than
+    during one.
+    """
+    from .adapters import ClinVarSnapshotAdapter
+    from .datacheck import DataReport, check_reference, check_sources
+    from .enumeration import enumerate_coding_snvs
+
+    config = load_gene_config(gene)
+    reference = check_reference(config, data_root=data_root)
+    report = DataReport(gene=config.gene, reference=reference)
+
+    if reference.present:
+        transcript = build_transcript(config, data_root=data_root)
+        variants = list(enumerate_coding_snvs(transcript))
+        step = max(1, len(variants) // sample)
+        sampled = variants[::step][:sample]
+        report.sampled = len(sampled)
+
+        adapters = []
+        if frequency is not None:
+            adapters.append(FrequencyAdapter(frequency, "check"))
+        if predictor is not None:
+            adapters.append(PredictorAdapter(predictor, "check"))
+        if splice is not None:
+            adapters.append(SpliceAdapter(splice, "check"))
+        if functional is not None:
+            adapters.append(FunctionalAdapter(functional, "check"))
+        if clinvar is not None:
+            adapters.append(ClinVarSnapshotAdapter.from_path(clinvar))
+        report.sources = check_sources(adapters, transcript, sampled)
+
+    typer.echo(report.summary())
+    if not report.usable:
+        raise typer.Exit(code=2)
+    if report.empty_but_present:
+        raise typer.Exit(code=1)
 
 
 @clinvar_app.command("build")

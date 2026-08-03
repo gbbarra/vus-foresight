@@ -5,6 +5,30 @@ O mapa faz uma afirmação falsificável, e é isso que o transforma de taxonomi
 **Não é teste unitário.** As camadas 1–3 rodam em CI a cada commit; isto roda sob demanda, contra
 os snapshots datados do `vus-hindsight`.
 
+## A verdade-terreno já está nos snapshots
+
+O protocolo original pedia uma tabela externa de desfechos. Ela não é necessária, e a razão é uma
+propriedade do desenho e não uma conveniência: `clinvar.self.classification` — a própria opinião do
+ClinVar sobre a variante — é publicada pelo adaptador e **lida por nenhum critério**, com teste que
+garante. O oráculo está nos mesmos snapshots que o motor consome, e é isolado por construção daquilo
+que está sendo medido.
+
+```bash
+vus-foresight validate \
+  --map-at-t          out/T2018/gene=BRCA1/gap_map.parquet \
+  --map-at-t-plus-n   out/T2024/gene=BRCA1/gap_map.parquet \
+  --clinvar-at-t         data/snapshots/clinvar_2018-01-01_BRCA1.tsv \
+  --clinvar-at-t-plus-n  data/snapshots/clinvar_2024-01-01_BRCA1.tsv \
+  --reference-date 2018-01-01
+```
+
+Uma tabela curada continua tendo precedência quando fornecida: quem leu os registros de submissão
+sabe algo que as fontes do pipeline não sabem.
+
+Só entram variantes **presentes e incertas em T**. Uma variante ausente do snapshot anterior não era
+VUS, era inexaminada, e contá-la responderia outra pergunta. Submissões conflitantes contam como
+VUS, não como resolução — tratá-las como resolvidas infla todas as quatro métricas.
+
 ## Protocolo
 
 1. Computar o mapa com o estado de evidência da data **T** — mesmos snapshots de gnomAD, dbNSFP,
@@ -47,14 +71,63 @@ câncer hereditário de início adulto" não é um plano de pesquisa.
 As que o mapa não antecipou são listadas nominalmente, nunca resumidas em um número.
 
 **2. Acurácia da causa.** O `blocking_reason` previsto corresponde ao tipo de evidência que de fato
-apareceu no registro de submissão? A saída inclui a matriz de confusão completa
-previsto × observado, porque a estrutura do erro é mais informativa que a taxa.
+apareceu? A saída inclui a matriz de confusão completa previsto × observado, porque a estrutura do
+erro é mais informativa que a taxa.
 
-É a métrica mais interessante e a mais publicável: ela testa se o sistema entende *por que* uma
-variante está incerta, não apenas *que* está.
+É a métrica mais interessante e a mais publicável: testa se o sistema entende *por que* uma variante
+está incerta, não apenas *que* está.
 
-**3. Direção.** O mapa apontava para o lado certo? A direção prevista é o alvo do conjunto
-suficiente mais barato — para onde o mapa diria a alguém para ir primeiro.
+A formulação original queria o tipo de evidência citado no registro de submissão. Isso não é campo
+estruturado em lugar nenhum do ClinVar — está em prosa livre — e este projeto não usa LLM em
+nenhuma etapa, então extrair aquilo significaria um classificador de palavras-chave que ninguém
+consegue calibrar.
+
+Existe uma fonte exata no lugar. Todo critério já declara `blocks_as`: a razão de bloqueio que sua
+ausência causa. Um critério que **passa a aplicar** entre dois snapshots é, pelo mapeamento da
+própria spec, a evidência que aliviou aquele bloqueio. Nenhuma tabela nova, nenhuma prosa.
+
+O limite vale ser dito: isso mede a evidência que chegou às **fontes deste pipeline**, não a que um
+submissor citou. As duas coincidem para dado funcional, de frequência e computacional, que chegam
+aqui dos mesmos datasets públicos. Divergem para segregação ou caso-controle não publicados, que
+nunca alcançam um critério intrínseco — então uma variante que o campo resolveu com dado de família
+aparece aqui sem causa observada, contada em `unobserved_cause`. Uma fração sistematicamente alta
+ali é ela mesma um achado: quanto da resolução acontece sobre evidência que nunca vira dado público.
+
+Há ainda um resultado que a métrica 2 produz de saída e que vale registrar: `BlockingReason` **não
+tem membro para "ninguém classificou um vizinho ainda"**. PS1 e PM5 movem variantes o tempo todo, e
+o mapa é forçado a arquivar esse bloqueio sob outro rótulo. O estudo marca a observação como
+`NEIGHBOUR_CLASSIFICATION` — vocabulário só do estudo, nunca da coluna de saída — e a matriz de
+confusão exibe isso como erro sistemático, que é a forma certa de a lacuna do schema aparecer.
+
+**3. Direção.** O mapa apontava para o lado certo? A direção prevista é o **sinal dos pontos
+acumulados**, e nada mais.
+
+Duas definições tentadoras estão erradas e foram tentadas primeiro. O alvo do conjunto suficiente
+*mais barato* mede custo de aquisição, não evidência: sem dado carregado, o caminho mais barato é
+o critério mais fácil de obter, o que não diz nada sobre para onde a variante está indo. E comparar
+`gap_to_LP` com `gap_to_LB` herda a assimetria dos limiares — com zero pontos as lacunas são 6 e 1,
+então essa regra chamaria de benigna toda variante sem evidência.
+
+Uma variante sem nenhum critério aplicado genuinamente não aponta para lado nenhum, e não é
+pontuada. Isso encolhe o denominador da métrica 3 para as variantes sobre as quais o mapa de fato
+fez uma afirmação direcional, que é a única população em que a métrica significa alguma coisa; as
+demais aparecem em `direction_unpredicted`.
+
+**5. O mapa chegou lá também?** Métrica extra, que só a série temporal permite. Para cada resolução
+do arquivo, três desfechos possíveis, e separá-los importa:
+
+| desfecho | leitura |
+|---|---|
+| `anticipated` | o mapa também chegou a um veredito — concordância sobre evidência que ambos viam |
+| `saw_evidence_only` | o mapa registrou a mesma evidência nova, mas ela não cruzou limiar. **O balde mais diagnóstico**: ou esta spec é mais estrita que o submissor foi, ou o submissor tinha evidência que os datasets públicos não carregam |
+| `unmoved` | nada se moveu aqui. A evidência nunca virou dado público, ou falta uma fonte no pipeline |
+
+Taxa de veredito baixa com visibilidade alta significa que os **limiares** são a discordância; taxa
+de visibilidade baixa significa que os **dados** não chegaram. Os dois pedem trabalho completamente
+diferente.
+
+E `ahead_of_clinvar` — variantes que o mapa moveu e o arquivo ainda não — não são erros. São as
+previsões vivas do mapa, e as primeiras linhas a ler.
 
 **4. Calibração temporal.** Variantes com lacuna menor foram resolvidas antes? Correlação de posto
 de Spearman entre a magnitude da lacuna e os dias até a resolução; **negativa** significa
