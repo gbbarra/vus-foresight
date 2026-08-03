@@ -207,6 +207,54 @@ def test_golden_snapshot(minus_gene, minus_config, toy_spec):
         )
 
 
+def test_the_committed_aggregations_are_byte_stable(minus_gene, minus_config, toy_spec):
+    """These tables get committed, so a reordered tie would read as a finding.
+
+    ``group_by`` emits groups in whatever order its hashing produces, which is
+    not stable across runs. Every aggregation therefore has to sort on a key
+    that is total over its own group keys, and this is what says so.
+    """
+    from vus_foresight.output import (
+        available_uningested_report,
+        blocking_summary,
+        equivalence_summary,
+        summarise_counts,
+    )
+
+    rows = _rows(minus_gene, minus_config, toy_spec, 400)
+    aggregations = (
+        blocking_summary,
+        equivalence_summary,
+        available_uningested_report,
+        lambda f: summarise_counts(f, ["gene", "consequence", "class_current"]),
+    )
+    for aggregate in aggregations:
+        first = aggregate(rows_to_frame(rows))
+        second = aggregate(rows_to_frame(rows))
+        assert first.write_csv(separator="\t") == second.write_csv(separator="\t")
+        # A total order means no two rows tie on the full sort key.
+        keys = first.select(first.columns).rows()
+        assert len(set(keys)) == len(keys)
+
+
+def test_streaming_a_partition_yields_exactly_what_reading_it_does(
+    tmp_path, minus_gene, minus_config, toy_spec
+):
+    """GapMapSource is the only reader that works at gene scale, so it must agree."""
+    from vus_foresight.output import GapMapSource, iter_rows
+
+    rows = _rows(minus_gene, minus_config, toy_spec, 250)
+    path = tmp_path / "map.parquet"
+    write_parquet(rows, path)
+
+    assert list(iter_rows(path)) == rows
+    # Across a batch boundary that does not divide the row count, and again on a
+    # second pass: a source that emptied itself would break the timeline diff.
+    source = GapMapSource(path, batch_size=17)
+    assert list(source) == rows
+    assert list(source) == rows
+
+
 def test_frame_schema_is_fixed_not_inferred(minus_gene, minus_config, toy_spec):
     from vus_foresight.gapmap import GAP_MAP_COLUMNS
 

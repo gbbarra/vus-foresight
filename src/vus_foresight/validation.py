@@ -420,7 +420,13 @@ def validate(
     # cause is unobserved.
     time_series_mode = observed_causes is not None
     observed = observed_causes or {}
-    by_id = {row.variant_id: row for row in rows}
+    outcomes = list(outcomes)
+    # Only the variants ClinVar has an opinion about are ever looked up, and
+    # that is a few thousand out of a whole gene's enumeration. Indexing just
+    # those lets ``rows`` be a stream rather than a list -- the difference
+    # between 9 GB and a few megabytes on real BRCA1.
+    wanted = {outcome.variant_id for outcome in outcomes}
+    by_id = {row.variant_id: row for row in rows if row.variant_id in wanted}
     result = ValidationResult()
 
     gaps: list[float] = []
@@ -569,12 +575,21 @@ def run_time_series_study(
     snapshots, and the specification. ``curated_outcomes`` still takes
     precedence when supplied, because a human who read the submission records
     knows what the pipeline's sources cannot.
+
+    The map at T is walked twice -- once to diff it, once to look up the
+    variants ClinVar resolved -- so it must be re-readable. Pass a list, or a
+    :class:`~vus_foresight.output.GapMapSource` for a whole gene.
     """
     from .engine.timeline import compare_maps
 
-    rows_before = list(rows_at_t)
-    rows_after = list(rows_at_t_plus_n)
-    diff = compare_maps(rows_before, rows_after)
+    for name, rows in (("rows_at_t", rows_at_t), ("rows_at_t_plus_n", rows_at_t_plus_n)):
+        if iter(rows) is rows:
+            raise TypeError(
+                f"{name} is a one-shot iterator; pass a list or a GapMapSource. "
+                "Materialising it here would defeat the point of streaming."
+            )
+
+    diff = compare_maps(rows_at_t, rows_at_t_plus_n)
     observed = observed_causes_from_diff(diff, spec)
 
     outcomes = list(curated_outcomes) if curated_outcomes is not None else []
@@ -587,7 +602,7 @@ def run_time_series_study(
         )
 
     result = validate(
-        rows_before,
+        rows_at_t,
         outcomes,
         reference_date=reference_date,
         observed_causes=observed,

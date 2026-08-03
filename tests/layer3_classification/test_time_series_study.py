@@ -515,3 +515,89 @@ def test_the_end_to_end_command_path(
     )
     assert study.result.resolved == 1
     assert study.result.resolvability_recall is not None
+
+
+def test_the_study_is_identical_whether_the_maps_are_streamed_or_materialised(
+    tmp_path, minus_gene, minus_config, toy_spec, missense_variants
+):
+    """The map at T is walked twice -- diffed, then looked up by variant.
+
+    A list survives that by keeping a whole gene in memory, which it cannot.
+    GapMapSource re-reads instead, and this pins the two to the same answer.
+    """
+    from vus_foresight.output import GapMapSource, read_rows, write_parquet
+
+    variants = missense_variants[:25]
+    target = variants[0]
+
+    cv_before = ClinVarSnapshot.from_records(
+        [ClinVarRecord(v.hgvs_c, v.hgvs_p, "uncertain", 2, v.codon_index) for v in variants],
+        date(2018, 1, 1),
+    )
+    cv_after = ClinVarSnapshot.from_records(
+        [
+            ClinVarRecord(
+                v.hgvs_c,
+                v.hgvs_p,
+                "pathogenic" if v is target else "uncertain",
+                3 if v is target else 2,
+                v.codon_index,
+                date(2020, 6, 1) if v is target else None,
+            )
+            for v in variants
+        ],
+        date(2024, 1, 1),
+    )
+
+    empty = tmp_path / "func_empty.tsv"
+    empty.write_text("hgvs_p\tclassification\tscore\tdataset\n", encoding="utf-8")
+    assayed = tmp_path / "func.tsv"
+    assayed.write_text(
+        "hgvs_p\tclassification\tscore\tdataset\n"
+        f"{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
+        encoding="utf-8",
+    )
+    regions = ((1, 40, "TOY-SGE"),)
+    rows_t = _map(
+        minus_gene, minus_config, toy_spec, variants,
+        adapters=[FunctionalAdapter(empty, "t0", assayed_regions=regions)],
+    )
+    rows_tn = _map(
+        minus_gene, minus_config, toy_spec, variants,
+        adapters=[FunctionalAdapter(assayed, "t1", assayed_regions=regions)],
+    )
+    path_t, path_tn = tmp_path / "t.parquet", tmp_path / "tn.parquet"
+    write_parquet(rows_t, path_t)
+    write_parquet(rows_tn, path_tn)
+
+    def run(at_t, at_tn):
+        return run_time_series_study(
+            at_t,
+            at_tn,
+            cv_before,
+            cv_after,
+            toy_spec,
+            transcript_id=minus_gene.transcript.transcript_id,
+            reference_date=date(2018, 1, 1),
+        )
+
+    materialised = run(read_rows(path_t), read_rows(path_tn))
+    streamed = run(GapMapSource(path_t, batch_size=6), GapMapSource(path_tn, batch_size=6))
+
+    assert streamed.result == materialised.result
+    assert streamed.anticipated == materialised.anticipated
+    assert streamed.saw_evidence_only == materialised.saw_evidence_only == [target.variant_id]
+    assert streamed.unmoved == materialised.unmoved
+    assert streamed.ahead_of_clinvar == materialised.ahead_of_clinvar
+
+
+def test_a_generator_of_rows_is_refused_by_the_study(
+    minus_gene, minus_config, toy_spec, missense_variants
+):
+    """It would be walked twice and be empty the second time."""
+    rows = _map(minus_gene, minus_config, toy_spec, missense_variants[:5])
+    empty = ClinVarSnapshot.from_records([], date(2018, 1, 1))
+    with pytest.raises(TypeError, match="one-shot iterator"):
+        run_time_series_study(
+            iter(rows), rows, empty, empty, toy_spec, transcript_id="NM_1.1"
+        )

@@ -32,8 +32,29 @@ estiverem erradas, o workflow falha ali e não publica nada.
 Isso também é melhor que um curador rodando `curl` à mão, independentemente de rede: a execução fica
 logada, os inputs ficam registrados, e o resultado é reproduzível.
 
-Depois, na sessão: baixe o artifact (`gh run download`) ou reponha os arquivos pequenos —
-`config/genes/*.yaml` populados e os FASTA de transcrito têm poucos KB e cabem num commit.
+A referência derivada é commitada de volta pelo próprio workflow: são ~19 KB de FASTA para os dois
+genes, e eles pertencem ao versionamento ao lado das coordenadas contra as quais estão conferidos.
+
+### E o mapa em si: `gap-map`
+
+Com a referência fixada, o segundo workflow roda a análise inteira no runner:
+
+```bash
+gh workflow run gap-map.yml -f snapshot_months=2020-01 -f include_current=true
+```
+
+Baixa os releases datados do ClinVar, computa um mapa por gene por data, diffa a série temporal,
+roda o estudo da §10 — e commita **só as tabelas derivadas**, em `results/`. Os Parquet por variante
+ficam no artifact: 4,6 MB por gene por data, e mudam por inteiro sempre que um snapshot muda, então
+não pertencem ao versionamento. As agregações, as transições e as métricas pertencem: são texto,
+pequenas, e um diff nelas é um diff em um achado.
+
+O `results/manifest.tsv` registra o `sha256` e a contagem de linhas de cada Parquet de origem, mais
+o `run_id`, o commit da CLI e se os limiares da spec estavam curados. É o que permite reproduzir uma
+tabela committada em vez de acreditar nela.
+
+Pré-requisito: `acquire-reference` já ter rodado. O workflow começa com `data check` e falha ali se
+a referência não estiver fixada, em vez de produzir um mapa a partir de coordenadas ausentes.
 
 O resto deste documento descreve os passos manuais, que continuam valendo quando há rede.
 

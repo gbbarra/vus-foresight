@@ -62,7 +62,32 @@ deles sem `--allow-unverified` — que é o que o número acima usou.
 
 Detalhes de como obter cada fonte em [`docs/data-acquisition.md`](docs/data-acquisition.md).
 
-Tudo o que não depende desses dois roda hoje, sobre genes sintéticos, com 202 testes.
+### Rodando contra o ClinVar real: `results/`
+
+O workflow [`gap-map`](.github/workflows/gap-map.yml) baixa releases datados do ClinVar num runner,
+computa um mapa por gene por data, diffa a série e roda o estudo da §10 — e commita **só a
+análise**. O mapa por variante é grande e muda por inteiro a cada snapshot; ele fica no artefato da
+run. O que entra no versionamento é o que dá para revisar:
+
+```
+results/manifest.tsv                             sha256 + contagem de cada Parquet de origem
+results/<gene>/<data>/blocking_summary.tsv       distribuição de blocking_reason
+results/<gene>/<data>/available_uningested.tsv   o ranking do que falta ingerir
+results/<gene>/<data>/consequence_class.tsv      consequência × classe × bloqueio
+results/<gene>/timeline_transitions.tsv          o que se moveu, e por qual tipo de evidência
+results/<gene>/validation_<T>_to_<T+n>/          as métricas da §10, e as previsões vivas
+```
+
+O manifesto é o que torna isso auditável: cada tabela committada registra o `sha256` do Parquet de
+onde saiu, então "regenere e confira" é uma operação definida, não um voto de confiança.
+
+Uma consequência de escala vale registrar. Cada linha carrega o traço completo da avaliação — é o
+desenho, §1 — e isso a torna cara de materializar: 135.935 linhas de BRCA1 custam ~9 GB como objetos
+Python, e um diff temporal precisa de **duas**. Por isso `timeline` e `validate` leem por streaming
+(`GapMapSource`, que relê do disco a cada passada) e o diff reduz o mapa antigo a um resumo por
+variante enquanto ele passa. Medido no BRCA1 real: **0,44 GB de pico** contra ~20 GB.
+
+Tudo o que não depende desses dois roda hoje, sobre genes sintéticos, com 231 testes.
 
 ```bash
 pip install -e ".[dev]"
@@ -242,8 +267,8 @@ vus-foresight map --gene config/genes/BRCA1.yaml   --frequency data/snapshots/gn
   --clinvar   data/snapshots/clinvar_2026-01-01.tsv --clinvar-date 2026-01-01 \
   --out-dir out
 
-# as agregações
-vus-foresight report out/gene=BRCA1/gap_map.parquet
+# as agregações; --out-dir escreve as TSV que valem versionar
+vus-foresight report out/gene=BRCA1/gap_map.parquet --out-dir results/BRCA1/2026-01-01
 
 # snapshot datado do ClinVar, e o diff entre duas datas
 vus-foresight clinvar build --source variant_summary.txt.gz \
@@ -260,7 +285,8 @@ vus-foresight validate \
   --map-at-t-plus-n out/T2024/gene=BRCA1/gap_map.parquet \
   --clinvar-at-t data/snapshots/clinvar_2018-01-01.tsv \
   --clinvar-at-t-plus-n data/snapshots/clinvar_2024-01-01.tsv \
-  --reference-date 2018-01-01
+  --reference-date 2018-01-01 \
+  --out-dir results/BRCA1/validation_2018-01-01_to_2024-01-01
 ```
 
 A verdade-terreno da §10 já está nos snapshots, e por uma propriedade do desenho:

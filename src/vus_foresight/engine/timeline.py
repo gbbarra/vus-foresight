@@ -97,6 +97,39 @@ def _applied_index(row: GapMapRow) -> dict[str, tuple[str, EvidenceClass]]:
     }
 
 
+@dataclass(frozen=True, slots=True)
+class _Before:
+    """Everything the diff needs from the earlier map, and nothing else.
+
+    A whole gene's rows do not fit in memory twice -- BRCA1's map is 135,935
+    rows at roughly 70 KB each once rehydrated -- so the earlier snapshot is
+    reduced to this as it streams past. The later snapshot never has to be held
+    at all: each of its rows is compared and discarded.
+
+    The fields are exactly those :func:`compare_maps` reads from ``old``. If a
+    transition ever needs another one, it has to be added here too, which is the
+    intended friction: the alternative is silently reintroducing the full row.
+    """
+
+    class_current: ACMGClass
+    points_current: int
+    blocking_reason: BlockingReason
+    gap_to_LP: int | None
+    spec_version: str
+    applied: dict[str, tuple[str, EvidenceClass]]
+
+    @classmethod
+    def of(cls, row: GapMapRow) -> "_Before":
+        return cls(
+            class_current=row.class_current,
+            points_current=row.points_current,
+            blocking_reason=row.blocking_reason,
+            gap_to_LP=row.gap_to_LP,
+            spec_version=row.spec_version,
+            applied=_applied_index(row),
+        )
+
+
 def _attribute(
     gained: Sequence[tuple[str, str, EvidenceClass]],
     lost: Sequence[tuple[str, str, EvidenceClass]],
@@ -184,19 +217,27 @@ def compare_maps(
     is reported separately rather than treated as a change: it means the
     enumeration or the transcript moved, which is a different event from
     evidence moving.
+
+    Both arguments are streamed exactly once. The earlier map is reduced to
+    :class:`_Before` as it goes and the later one is consumed row by row, so
+    peak memory is one summary per variant rather than two full maps.
+
+    The transitions therefore come out in the order the later map is read --
+    the enumeration order -- rather than sorted by identifier. That is the
+    order every other output uses.
     """
-    before_rows = {row.variant_id: row for row in before}
-    after_rows = {row.variant_id: row for row in after}
+    pending = {row.variant_id: _Before.of(row) for row in before}
     diff = TimelineDiff(label_before=label_before, label_after=label_after)
 
-    diff.appeared = sorted(set(after_rows) - set(before_rows))
-    diff.disappeared = sorted(set(before_rows) - set(after_rows))
-
-    for variant_id in sorted(set(before_rows) & set(after_rows)):
-        old, new = before_rows[variant_id], after_rows[variant_id]
+    for new in after:
+        variant_id = new.variant_id
+        old = pending.pop(variant_id, None)
+        if old is None:
+            diff.appeared.append(variant_id)
+            continue
         diff.compared += 1
 
-        old_applied, new_applied = _applied_index(old), _applied_index(new)
+        old_applied, new_applied = old.applied, _applied_index(new)
         gained = [
             (code, strength, evidence_class)
             for code, (strength, evidence_class) in sorted(new_applied.items())
@@ -242,6 +283,10 @@ def compare_maps(
                 spec_after=new.spec_version,
             )
         )
+
+    # Whatever the later map never claimed was dropped from the enumeration.
+    diff.disappeared = sorted(pending)
+    diff.appeared.sort()
     return diff
 
 
@@ -253,10 +298,20 @@ def compare_series(
     Consecutive rather than all-against-the-first: the question section 4 asks
     is when a variant moved and on what, and collapsing five years into a single
     before/after loses exactly that.
+
+    Each snapshot is iterated twice -- once as the later map of one interval and
+    once as the earlier map of the next -- so the iterables must be re-readable.
+    A list is; a bare generator is not, and would make the second interval
+    report every variant as disappeared instead of failing.
     """
-    materialised = [(label, list(rows)) for label, rows in snapshots]
-    if len(materialised) < 2:
+    if len(snapshots) < 2:
         raise ValueError("a series needs at least two snapshots")
+    for label, rows in snapshots:
+        if iter(rows) is rows:
+            raise TypeError(
+                f"snapshot {label!r} is a one-shot iterator; pass a list or a "
+                "GapMapSource, which re-reads from disk on each iteration"
+            )
     return [
         compare_maps(
             older,
@@ -265,6 +320,6 @@ def compare_series(
             label_after=label_newer,
         )
         for (label_older, older), (label_newer, newer) in zip(
-            materialised, materialised[1:]
+            snapshots, snapshots[1:]
         )
     ]

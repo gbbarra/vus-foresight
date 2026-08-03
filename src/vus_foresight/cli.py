@@ -46,11 +46,12 @@ from .genome.reference import (
     load_gene_config,
 )
 from .output import (
+    GapMapSource,
     available_uningested_report,
     blocking_summary,
     equivalence_summary,
     read_parquet,
-    read_rows,
+    summarise_counts,
     write_parquet,
 )
 
@@ -300,13 +301,22 @@ def map_command(
 def report_command(
     parquet: Path = typer.Argument(..., help="A gap map Parquet file."),
     top: int = typer.Option(20, help="Rows to show per section."),
+    out_dir: Optional[Path] = typer.Option(
+        None,
+        help=(
+            "Also write the aggregations as TSV. These are small and "
+            "deterministic, so they are the part of a run worth committing; the "
+            "Parquet they came from is not."
+        ),
+    ),
 ) -> None:
     """Print the aggregations the map exists to support."""
     frame = read_parquet(parquet)
     typer.echo(f"{frame.height:,} rows\n")
 
+    blocking = blocking_summary(frame)
     typer.echo("== blocking reason ==")
-    typer.echo(str(blocking_summary(frame)))
+    typer.echo(str(blocking))
 
     typer.echo("\n== available_uningested: public data, not yet loaded ==")
     report = available_uningested_report(frame)
@@ -315,8 +325,26 @@ def report_command(
     else:
         typer.echo(str(report.head(top)))
 
+    classes = equivalence_summary(frame)
     typer.echo("\n== largest equivalence classes ==")
-    typer.echo(str(equivalence_summary(frame).head(top)))
+    typer.echo(str(classes.head(top)))
+
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        written = {
+            "blocking_summary.tsv": blocking,
+            "available_uningested.tsv": report,
+            "consequence_class.tsv": summarise_counts(
+                frame, ["gene", "consequence", "class_current", "blocking_reason"]
+            ),
+            # Truncated on purpose: a whole gene has upwards of a hundred
+            # thousand classes, and the tail of size-one classes carries no
+            # information the per-variant map does not already have.
+            f"equivalence_top{top}.tsv": classes.head(top),
+        }
+        for name, table in written.items():
+            table.write_csv(out_dir / name, separator="\t")
+        typer.echo(f"\nwrote {len(written)} TSV aggregations to {out_dir}")
 
 
 @reference_app.command("from-mane")
@@ -435,6 +463,9 @@ def validate_command(
         1, help="Review-status floor for a ClinVar record to count as ground truth."
     ),
     show: int = typer.Option(10, help="How many example variants to list per section."),
+    out_dir: Optional[Path] = typer.Option(
+        None, help="Also write the study as TSV: metrics, predictions, misses."
+    ),
 ) -> None:
     """Run the section 10 protocol.
 
@@ -453,7 +484,14 @@ def validate_command(
     from .validation import read_outcomes, run_time_series_study
     from .validation import validate as run_validation
 
-    rows = read_rows(map_at_t)
+    # Streamed rather than read: a whole gene's rows cost about 9 GB as objects
+    # and the time-series mode walks two maps. GapMapSource re-reads from disk
+    # on each pass instead.
+    rows = GapMapSource(map_at_t)
+    first = next(iter(rows), None)
+    if first is None:
+        typer.secho(f"{map_at_t} has no rows", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=2)
     when = date.fromisoformat(reference_date) if reference_date else None
     curated = read_outcomes(outcomes) if outcomes is not None else None
 
@@ -469,17 +507,17 @@ def validate_command(
     else:
         if clinvar_at_t_plus_n is None:
             raise typer.BadParameter("--clinvar-at-t-plus-n is required in time-series mode")
-        spec_id = spec_name or rows[0].spec_version.split("@")[0]
+        spec_id = spec_name or first.spec_version.split("@")[0]
         candidates = sorted(spec_dir.glob(f"{spec_id}*.yaml"))
         if not candidates:
             raise typer.BadParameter(f"no specification matching {spec_id!r} in {spec_dir}")
         study = run_time_series_study(
             rows,
-            read_rows(map_at_t_plus_n),
+            GapMapSource(map_at_t_plus_n),
             ClinVarSnapshot.read(clinvar_at_t),
             ClinVarSnapshot.read(clinvar_at_t_plus_n),
             load_spec(candidates[0]),
-            transcript_id=rows[0].transcript,
+            transcript_id=first.transcript,
             reference_date=when,
             min_stars=min_stars,
             curated_outcomes=curated,
@@ -511,6 +549,76 @@ def validate_command(
         )
         for variant_id in study.ahead_of_clinvar[:show]:
             typer.echo(f"  {variant_id}")
+
+    if out_dir is not None:
+        _write_study(out_dir, result, study)
+        typer.echo(f"\nwrote the study to {out_dir}")
+
+
+def _write_study(out_dir: Path, result, study) -> None:
+    """Persist a validation study as TSV.
+
+    Metrics as name/value pairs rather than one wide row: the set of metrics has
+    already grown once, and a long table survives that without every previous
+    run's file having a different header from the next.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    metrics: list[tuple[str, str]] = [
+        ("considered", str(result.considered)),
+        ("resolved", str(result.resolved)),
+        ("resolvability_recall", _ratio(result.resolvability_recall)),
+        ("cause_accuracy", _ratio(result.cause_accuracy)),
+        ("cause_scored", str(result.cause_scored)),
+        ("unobserved_cause", str(result.unobserved_cause)),
+        ("direction_accuracy", _ratio(result.direction_accuracy)),
+        ("direction_scored", str(result.direction_scored)),
+        ("direction_unpredicted", str(result.direction_unpredicted)),
+        (
+            "temporal_correlation",
+            "" if result.temporal_correlation is None else f"{result.temporal_correlation:.6f}",
+        ),
+    ]
+    if study is not None:
+        metrics += [
+            ("anticipated", str(len(study.anticipated))),
+            ("saw_evidence_only", str(len(study.saw_evidence_only))),
+            ("unmoved", str(len(study.unmoved))),
+            ("ahead_of_clinvar", str(len(study.ahead_of_clinvar))),
+            ("anticipation_rate", _ratio(study.anticipation_rate)),
+            ("evidence_visibility_rate", _ratio(study.evidence_visibility_rate)),
+        ]
+    _write_tsv(out_dir / "metrics.tsv", ("metric", "value"), metrics)
+
+    _write_tsv(
+        out_dir / "cause_confusion.tsv",
+        ("predicted_blocking_reason", "observed_evidence", "variants"),
+        [
+            (predicted, observed, str(count))
+            for (predicted, observed), count in sorted(result.cause_confusion.items())
+        ],
+    )
+    _write_tsv(out_dir / "misses.tsv", ("miss",), [(line,) for line in result.misses])
+    if study is not None:
+        # The whole lists, not a sample: 'ahead_of_clinvar' is the set of live,
+        # still-unfalsified predictions, and truncating it would throw away the
+        # only output of this command that a future run can be scored against.
+        for name, values in (
+            ("predictions_ahead_of_clinvar.tsv", study.ahead_of_clinvar),
+            ("unmoved.tsv", study.unmoved),
+            ("saw_evidence_only.tsv", study.saw_evidence_only),
+        ):
+            _write_tsv(out_dir / name, ("variant_id",), [(v,) for v in values])
+
+
+def _ratio(value: float | None) -> str:
+    return "" if value is None else f"{value:.6f}"
+
+
+def _write_tsv(path: Path, header: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
+    lines = ["\t".join(header)]
+    lines += ["\t".join(field.replace("\t", " ") for field in row) for row in rows]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 @data_app.command("check")
@@ -631,7 +739,10 @@ def timeline_command(
     if len(parsed) < 2:
         raise typer.BadParameter("a timeline needs at least two snapshots")
 
-    series = [(label, read_rows(path)) for label, path in parsed]
+    # Streamed. compare_series reads each snapshot twice -- as the later map of
+    # one interval and the earlier map of the next -- and GapMapSource makes
+    # that a re-read rather than a second copy in memory.
+    series = [(label, GapMapSource(path)) for label, path in parsed]
     diffs = compare_series(series)
 
     lines: list[str] = []

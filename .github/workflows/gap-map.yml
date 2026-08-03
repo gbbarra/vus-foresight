@@ -1,0 +1,311 @@
+name: gap-map
+
+# Compute the gap map against real ClinVar snapshots and commit the analysis.
+#
+# The split is deliberate. The per-variant map is large (4.6 MB of Parquet for
+# BRCA1, and it changes wholesale whenever a snapshot moves) and belongs in an
+# artifact. What belongs in version control is what a reader can actually
+# review: the blocking-reason distribution, the available-uningested ranking,
+# the timeline transitions, and the section 10 study. Those are small, text,
+# and diffable -- so a change in them shows up in a pull request as a change in
+# a finding rather than as a new binary blob.
+#
+# The manifest records the sha256 of every Parquet the committed tables were
+# derived from, so "regenerate this and check" is a defined operation.
+#
+# Requires the reference to be pinned already: run acquire-reference first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      code_ref:
+        description: >-
+          Branch or tag holding the CLI this workflow calls. Set to main once
+          the pull request has merged.
+        required: true
+        default: 'claude/brca-evidence-gap-map-vyaubj'
+      genes:
+        description: 'Comma-separated gene configs to map'
+        required: true
+        default: 'BRCA1,BRCA2'
+      snapshot_months:
+        description: >-
+          ClinVar archive months (YYYY-MM) to compute a map at, comma separated,
+          oldest first. These become T; the current release becomes T+n.
+        required: true
+        default: '2020-01'
+      include_current:
+        description: 'Also compute a map against the current ClinVar release'
+        type: boolean
+        required: false
+        default: true
+      allow_unverified:
+        description: >-
+          Run even though the ENIGMA specification is still marked
+          verified: false. Its numeric thresholds have not been curated against
+          the published document, so the numbers are a demonstration of the
+          machinery, not a claim about BRCA1/2. Recorded in the manifest.
+        type: boolean
+        required: false
+        default: true
+      commit_results:
+        description: 'Commit the derived tables back to code_ref'
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    # Two genes at two dates is four whole-gene maps plus the timeline and the
+    # study, each of which streams the Parquet back through the row model.
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.code_ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Fails the run rather than producing a map from coordinates that are not
+      # there. 'data check' exits 2 when the reference is missing, which is the
+      # state a fresh clone is in until acquire-reference has run.
+      - name: Require a pinned reference
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            vus-foresight data check --gene "config/genes/${gene}.yaml"
+          done
+
+      - name: Build dated ClinVar snapshots
+        env:
+          MONTHS: ${{ inputs.snapshot_months }}
+          GENES: ${{ inputs.genes }}
+          CURRENT: ${{ inputs.include_current }}
+        run: |
+          set -euo pipefail
+          mkdir -p raw data/snapshots
+          IFS=',' read -ra GENE_LIST <<< "$GENES"
+
+          build_for () {
+            local source_file="$1" label="$2"
+            for gene in "${GENE_LIST[@]}"; do
+              gene="$(echo "$gene" | xargs)"
+              # Version-exact transcript match: a classification made against
+              # NM_007294.3 is not evidence about a coordinate in NM_007294.4.
+              # An older archive month may legitimately yield nothing.
+              vus-foresight clinvar build \
+                --source "$source_file" \
+                --out "data/snapshots/clinvar_${label}_${gene}.tsv" \
+                --gene "config/genes/${gene}.yaml" \
+                || echo "::warning::no records for $gene in $label"
+            done
+          }
+
+          # The dates that actually materialised. Every later step reads this
+          # file rather than re-deriving the list, so a month that 404'd drops
+          # out of the whole pipeline consistently instead of half of it.
+          : > data/snapshot_dates.txt
+
+          IFS=',' read -ra MONTH_LIST <<< "$MONTHS"
+          for month in "${MONTH_LIST[@]}"; do
+            month="$(echo "$month" | xargs)"
+            echo "::group::ClinVar $month"
+            curl -fSL --retry 3 -o "raw/vs_${month}.txt.gz" \
+              "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive/variant_summary_${month}.txt.gz" \
+              || { echo "::warning::archive month $month unavailable"; echo "::endgroup::"; continue; }
+            build_for "raw/vs_${month}.txt.gz" "${month}-01"
+            echo "${month}-01" >> data/snapshot_dates.txt
+            rm -f "raw/vs_${month}.txt.gz"
+            echo "::endgroup::"
+          done
+
+          if [ "${CURRENT}" = "true" ]; then
+            echo "::group::ClinVar current"
+            curl -fSL --retry 3 -o raw/vs_current.txt.gz \
+              "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/variant_summary.txt.gz"
+            today="$(date -u +%Y-%m-%d)"
+            build_for raw/vs_current.txt.gz "$today"
+            echo "$today" >> data/snapshot_dates.txt
+            rm -f raw/vs_current.txt.gz
+            echo "::endgroup::"
+          fi
+
+          # ISO dates sort chronologically, so this is the series order the
+          # timeline needs regardless of how the input was written.
+          sort -u -o data/snapshot_dates.txt data/snapshot_dates.txt
+          echo "snapshot dates:"; cat data/snapshot_dates.txt
+
+      - name: Compute a map per gene per snapshot
+        env:
+          GENES: ${{ inputs.genes }}
+          ALLOW: ${{ inputs.allow_unverified }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          FLAG=""
+          if [ "${ALLOW}" = "true" ]; then FLAG="--allow-unverified"; fi
+
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            while read -r when; do
+              snapshot="data/snapshots/clinvar_${when}_${gene}.tsv"
+              [ -s "$snapshot" ] || { echo "::warning::no snapshot for $gene at $when"; continue; }
+              echo "::group::$gene @ $when"
+              vus-foresight map \
+                --gene "config/genes/${gene}.yaml" \
+                --clinvar "$snapshot" \
+                --clinvar-date "$when" \
+                --out-dir "out/${when}" \
+                $FLAG
+              vus-foresight report "out/${when}/gene=${gene}/gap_map.parquet" \
+                --out-dir "results/${gene}/${when}"
+              echo "::endgroup::"
+            done < data/snapshot_dates.txt
+          done
+
+      # The section 4 finding lives here: variants that leave VUS because a
+      # neighbour was classified, with no new evidence about themselves.
+      - name: Diff the series and attribute what moved
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            args=()
+            while read -r when; do
+              path="out/${when}/gene=${gene}/gap_map.parquet"
+              [ -f "$path" ] && args+=("${when}=${path}")
+            done < data/snapshot_dates.txt
+            if [ "${#args[@]}" -lt 2 ]; then
+              echo "::warning::$gene has fewer than two maps; no timeline"
+              continue
+            fi
+            echo "::group::timeline $gene"
+            vus-foresight timeline "${args[@]}" \
+              --out "results/${gene}/timeline_transitions.tsv"
+            echo "::endgroup::"
+          done
+
+      # Section 10, with no curated outcome table: the ground truth is
+      # clinvar.self.classification, published by the adapter and read by no
+      # criterion, so the oracle sits in the same snapshots the engine consumes.
+      - name: Run the section 10 study
+        env:
+          GENES: ${{ inputs.genes }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra LIST <<< "$GENES"
+          FIRST="$(head -1 data/snapshot_dates.txt)"
+          LAST="$(tail -1 data/snapshot_dates.txt)"
+          if [ "$FIRST" = "$LAST" ]; then
+            echo "::warning::only one snapshot date; the study needs T and T+n"
+            exit 0
+          fi
+          for gene in "${LIST[@]}"; do
+            gene="$(echo "$gene" | xargs)"
+            t="out/${FIRST}/gene=${gene}/gap_map.parquet"
+            tn="out/${LAST}/gene=${gene}/gap_map.parquet"
+            [ -f "$t" ] && [ -f "$tn" ] || { echo "::warning::$gene lacks both maps"; continue; }
+            echo "::group::validate $gene $FIRST -> $LAST"
+            vus-foresight validate \
+              --map-at-t "$t" \
+              --map-at-t-plus-n "$tn" \
+              --clinvar-at-t "data/snapshots/clinvar_${FIRST}_${gene}.tsv" \
+              --clinvar-at-t-plus-n "data/snapshots/clinvar_${LAST}_${gene}.tsv" \
+              --reference-date "$FIRST" \
+              --out-dir "results/${gene}/validation_${FIRST}_to_${LAST}"
+            echo "::endgroup::"
+          done
+
+      - name: Write the manifest
+        env:
+          GENES: ${{ inputs.genes }}
+          ALLOW: ${{ inputs.allow_unverified }}
+          CODE_REF: ${{ inputs.code_ref }}
+        run: |
+          python - <<'PY'
+          import hashlib, os, pathlib
+          import pyarrow.parquet as pq
+
+          rows = []
+          for path in sorted(pathlib.Path("out").rglob("*.parquet")):
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              rows.append((str(path), str(pq.ParquetFile(path).metadata.num_rows), digest))
+
+          snapshots = []
+          for path in sorted(pathlib.Path("data/snapshots").glob("*.tsv")):
+              # -1 for the header. The count is what makes an empty snapshot --
+              # the usual symptom of a transcript-version mismatch -- visible in
+              # the committed record rather than only in the log.
+              kept = max(0, sum(1 for _ in path.open(encoding="utf-8")) - 1)
+              snapshots.append(
+                  (path.name, str(kept), hashlib.sha256(path.read_bytes()).hexdigest())
+              )
+
+          out = pathlib.Path("results/manifest.tsv")
+          out.parent.mkdir(parents=True, exist_ok=True)
+          lines = ["key\tvalue\tdigest"]
+          lines.append(f"run_id\t{os.environ.get('GITHUB_RUN_ID', '')}\t")
+          lines.append(f"code_ref\t{os.environ.get('CODE_REF', '')}\t")
+          lines.append(f"code_sha\t{os.environ.get('GITHUB_SHA', '')}\t")
+          lines.append(f"genes\t{os.environ.get('GENES', '')}\t")
+          lines.append(f"spec_thresholds_curated\t{os.environ.get('ALLOW') != 'true'}\t")
+          for name, kept, digest in snapshots:
+              lines.append(f"snapshot:{name}\t{kept}\t{digest}")
+          for path, count, digest in rows:
+              lines.append(f"map:{path}\t{count}\t{digest}")
+          out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print(out.read_text(encoding="utf-8"))
+          PY
+
+      - name: Commit the derived tables
+        if: ${{ inputs.commit_results }}
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results/
+          if git diff --cached --quiet; then
+            echo "nothing changed"
+            exit 0
+          fi
+          # Sizes in the log: if a committed table ever grows into something
+          # that does not belong in git, this is where it becomes visible.
+          du -ah results/ | sort -h | tail -20
+          git commit -m "Gap map results from run ${GITHUB_RUN_ID}
+
+          Aggregations, timeline transitions and the section 10 study, derived
+          from the Parquet maps whose digests are recorded in the manifest. The
+          maps themselves are in the run's artifact, not in this commit."
+          git pull --rebase origin "$CODE_REF"
+          git push origin "HEAD:$CODE_REF"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vus-foresight-gap-map
+          path: |
+            out/
+            results/
+            data/snapshots/
+          retention-days: 30
+          if-no-files-found: warn

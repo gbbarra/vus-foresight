@@ -45,6 +45,8 @@ __all__ = [
     "rows_to_frame",
     "rows_from_frame",
     "read_rows",
+    "iter_rows",
+    "GapMapSource",
     "write_parquet",
     "read_parquet",
     "blocking_summary",
@@ -369,8 +371,49 @@ def rows_from_frame(frame: pl.DataFrame) -> list[GapMapRow]:
 
 
 def read_rows(path: str | Path) -> list[GapMapRow]:
-    """Read a gap map partition straight back into model objects."""
+    """Read a gap map partition straight back into model objects.
+
+    Materialises the whole partition. Measured on real BRCA1, 135,935 rows cost
+    about 9 GB as Python objects, so anything that reads a whole gene -- let
+    alone two, as a timeline diff does -- should use :class:`GapMapSource`.
+    """
     return rows_from_frame(read_parquet(path))
+
+
+def iter_rows(
+    path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE
+) -> Iterator[GapMapRow]:
+    """Stream a gap map partition, holding one batch of rows at a time."""
+    import pyarrow.parquet as pq
+
+    handle = pq.ParquetFile(path)
+    for batch in handle.iter_batches(batch_size=batch_size):
+        frame = pl.from_arrow(batch)
+        assert isinstance(frame, pl.DataFrame)
+        yield from rows_from_frame(frame)
+
+
+class GapMapSource:
+    """A gap map on disk, re-read from scratch on each iteration.
+
+    The analyses need more than one pass -- the time-series study walks the map
+    at T once to diff it and again to look up the variants ClinVar resolved --
+    and a generator would silently be empty the second time. A list gives the
+    same repeatability by keeping every row in memory, which for a whole gene it
+    cannot. This gives the repeatability without the memory.
+    """
+
+    __slots__ = ("path", "batch_size")
+
+    def __init__(self, path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE) -> None:
+        self.path = Path(path)
+        self.batch_size = batch_size
+
+    def __iter__(self) -> Iterator[GapMapRow]:
+        return iter_rows(self.path, batch_size=self.batch_size)
+
+    def __repr__(self) -> str:  # pragma: no cover - diagnostics
+        return f"GapMapSource({str(self.path)!r})"
 
 
 def blocking_summary(frame: pl.DataFrame) -> pl.DataFrame:
@@ -393,7 +436,9 @@ def equivalence_summary(frame: pl.DataFrame) -> pl.DataFrame:
             pl.first("blocking_reason").alias("blocking_reason"),
             pl.first("gap_to_LP").alias("gap_to_LP"),
         )
-        .sort("variants", "equivalence_class_id", descending=[True, False])
+        # Every group key is in the sort, so ties cannot be broken by the
+        # hash order group_by happens to produce on this run.
+        .sort("variants", "gene", "equivalence_class_id", descending=[True, False, False])
     )
 
 
@@ -406,7 +451,10 @@ def available_uningested_report(frame: pl.DataFrame) -> pl.DataFrame:
     tag = FeasibilityTag.AVAILABLE_UNINGESTED.value
     exploded = (
         frame.filter(pl.col("blocking_reason") != BlockingReason.RESOLVED_NOT_BLOCKED.value)
-        .explode("minimum_sufficient_sets")
+        # Pinned rather than left to the default, which flips in Polars 2.0: a
+        # variant with no sufficient set at all must drop out here, not become
+        # a row with an empty requirement list.
+        .explode("minimum_sufficient_sets", empty_as_null=True)
         .drop_nulls("minimum_sufficient_sets")
     )
     if exploded.height == 0:
@@ -426,7 +474,7 @@ def available_uningested_report(frame: pl.DataFrame) -> pl.DataFrame:
         )
         .group_by("gene", "codes", "target")
         .agg(pl.len().alias("variants"))
-        .sort("variants", "codes", descending=[True, False])
+        .sort("variants", "gene", "codes", "target", descending=[True, False, False, False])
     )
 
 

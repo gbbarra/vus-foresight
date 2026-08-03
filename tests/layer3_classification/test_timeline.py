@@ -340,6 +340,78 @@ def test_transitions_survive_a_parquet_round_trip(
     )
 
 
+def test_streaming_a_map_from_disk_gives_the_identical_diff(
+    tmp_path, minus_gene, minus_config, toy_spec, missense_variants
+):
+    """The whole point of GapMapSource: same answer, without holding two maps.
+
+    A real gene's map is ~9 GB once rehydrated and the diff needs two of them,
+    so the streaming path is the only one that runs at full scale -- which makes
+    it the one that has to be pinned to the reference implementation.
+    """
+    from vus_foresight.output import GapMapSource, read_rows, write_parquet
+
+    variants = missense_variants[:30]
+    target = variants[0]
+    empty = tmp_path / "cv_empty.tsv"
+    write_snapshot([], empty)
+    later = tmp_path / "cv_later.tsv"
+    write_snapshot(
+        [ClinVarRecord("c.999999A>G", target.hgvs_p, "pathogenic", 3, target.codon_index)],
+        later,
+    )
+    before_path, after_path = tmp_path / "b.parquet", tmp_path / "a.parquet"
+    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path)
+    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later), after_path)
+
+    materialised = compare_maps(read_rows(before_path), read_rows(after_path))
+    # A batch size below the row count forces several Parquet batches, so the
+    # test covers the boundary rather than a single-batch shortcut.
+    streamed = compare_maps(
+        GapMapSource(before_path, batch_size=7), GapMapSource(after_path, batch_size=7)
+    )
+
+    assert streamed.transitions == materialised.transitions
+    assert streamed.compared == materialised.compared == len(variants)
+    assert streamed.appeared == materialised.appeared
+    assert streamed.disappeared == materialised.disappeared
+    assert streamed.transitions
+
+
+def test_transitions_come_out_in_enumeration_order(
+    tmp_path, minus_gene, minus_config, toy_spec, missense_variants
+):
+    """Streaming fixed the order to the later map's, which is the enumerator's."""
+    from vus_foresight.output import GapMapSource, write_parquet
+
+    variants = missense_variants[:30]
+    target = variants[0]
+    empty, later = tmp_path / "e.tsv", tmp_path / "l.tsv"
+    write_snapshot([], empty)
+    write_snapshot(
+        [ClinVarRecord("c.999999A>G", target.hgvs_p, "pathogenic", 3, target.codon_index)],
+        later,
+    )
+    before_path, after_path = tmp_path / "b.parquet", tmp_path / "a.parquet"
+    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path)
+    after_rows = _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later)
+    write_parquet(after_rows, after_path)
+
+    diff = compare_maps(GapMapSource(before_path), GapMapSource(after_path))
+    moved = [t.variant_id for t in diff.transitions]
+    order = [row.variant_id for row in after_rows]
+    assert moved == [vid for vid in order if vid in set(moved)]
+
+
+def test_a_one_shot_iterator_is_refused_rather_than_silently_emptied(
+    minus_gene, minus_config, toy_spec, missense_variants
+):
+    """A generator would make the second interval report everything as dropped."""
+    rows = _map(minus_gene, minus_config, toy_spec, missense_variants[:10])
+    with pytest.raises(TypeError, match="one-shot iterator"):
+        compare_series([("T0", iter(rows)), ("T1", iter(rows))])
+
+
 def test_parquet_round_trip_preserves_every_field(
     tmp_path, minus_gene, minus_config, toy_spec, missense_variants
 ):
