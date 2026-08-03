@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vus-foresight"
+version = "0.1.0"
+description = "Evidence Gap Map for clinical genomics: where uncertainty lives, and what it would cost to remove it."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = [
+    "polars>=1.0",
+    "pydantic>=2.6",
+    "duckdb>=1.0",
+    "typer>=0.12",
+    "pyyaml>=6.0",
+    "pyarrow>=15.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "hypothesis>=6.100"]
+
+[project.scripts]
+vus-foresight = "vus_foresight.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+vus_foresight = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "requires_reference: needs a real reference transcript resource that is not vendored",
+    "validation_study: section 10 protocol, run on demand and not in CI",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

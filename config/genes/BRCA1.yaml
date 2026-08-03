@@ -1,0 +1,79 @@
+# BRCA1 -- MANE Select NM_007294.4 / ENST00000357654.9
+#
+# Exon coordinates and the transcript sequence are NOT in this file. They must be
+# imported from MANE Select itself:
+#
+#     vus-foresight reference import --gene config/genes/BRCA1.yaml --data-root data
+#
+# See docs/reference-data.md. Inventing coordinates would produce HGVS that looks
+# correct and is wrong, which spec section 11 names as the riskiest failure in the
+# system; the loader therefore refuses to build a transcript without them.
+
+gene: BRCA1
+assembly: GRCh38
+spec: enigma_brca_v1.1.0
+
+# Loss of function is an established mechanism for BRCA1. This is the gene-level
+# fact the PVS1 tree turns on, which is why it lives here and not in the spec.
+lof_mechanism: established
+
+transcript:
+  id: NM_007294.4
+  mane_select: true
+  chrom: chr17
+  # BRCA1 is on the minus strand of chromosome 17. BRCA2 is on the plus strand of
+  # chromosome 13. That asymmetry is a free internal control: a reverse-complement
+  # bug shows up in one gene and not the other (spec section 11, strand test).
+  strand: "-"
+  cds_length: 5592
+  protein_length: 1863
+  exon_count: 23
+  # BRCA1 has no exon 4. The labels are clinical names, never arithmetic.
+  exon_labels: ["1", "2", "3", "5", "6", "7", "8", "9", "10", "11", "12", "13",
+                "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24"]
+  # cds_start_tx / cds_end_tx / exons are filled in by 'reference import'.
+
+sequence:
+  path: reference/BRCA1_NM_007294.4.fa
+  provenance: >-
+    RefSeq NM_007294.4 spliced transcript, as distributed by MANE. Record the
+    sha256 and expected_length here once imported so a silent reference change
+    fails the run instead of shifting every coordinate by one.
+
+flanks:
+  path: reference/BRCA1_intronic_flanks.tsv
+  provenance: >-
+    Plus-strand GRCh38 bases for 50 nt on each side of every junction, as
+    'position<TAB>base'. Produced by 'reference import' from the genomic FASTA.
+
+intronic_flank_bp: 50
+
+# UNVERIFIED. Approximate published boundaries, included so the PM1 and PVS1
+# machinery has something to read; they must be curated before any result is
+# reported. The gap engine's answers depend on these ranges.
+functional_regions:
+  - name: RING domain
+    start_aa: 1
+    end_aa: 109
+    tags: [critical, domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P38398"
+  - name: coiled-coil
+    start_aa: 1391
+    end_aa: 1424
+    tags: [domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P38398"
+  - name: BRCT repeats
+    start_aa: 1646
+    end_aa: 1859
+    tags: [critical, domain]
+    source: "UNVERIFIED approximate boundary; curate against UniProt P38398"
+
+# Residue ranges covered by a saturation genome editing screen. Coverage is what
+# separates 'assay_feasible' from 'available_uningested' in the gap report, so an
+# empty list here understates how much is already answerable.
+mave_datasets: []
+
+notes: >-
+  Legacy BIC numbering and the older BRCA1 transcripts are not accepted anywhere
+  in this project. If a legacy identifier has to be consumed, it goes through an
+  explicit, tested translation layer -- never implicitly.
