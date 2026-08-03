@@ -19,6 +19,12 @@ name: acquire-reference
 on:
   workflow_dispatch:
     inputs:
+      code_ref:
+        description: >-
+          Branch or tag holding the CLI this workflow calls. Set to main once
+          the pull request has merged.
+        required: true
+        default: 'claude/brca-evidence-gap-map-vyaubj'
       mane_release:
         description: 'MANE release directory, e.g. release_1.4'
         required: true
@@ -49,7 +55,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # Explicit ref rather than the dispatched one. GitHub only offers a
+      # workflow_dispatch button for files on the default branch, so this will
+      # usually be launched "from main" while the CLI it calls lives on a
+      # feature branch. Taking the ref as an input removes that footgun instead
+      # of leaving it as a step in a README.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.code_ref }}
 
       - uses: actions/setup-python@v5
         with:
