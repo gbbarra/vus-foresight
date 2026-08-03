@@ -23,22 +23,44 @@ BRCA1/BRCA2 primeiro, arquitetura gene-agnóstica.
 | 4 | Protocolo de validação §10 | **implementada**, roda sobre a própria série temporal, sem tabela externa |
 | 5 | Segundo gene | testado com gene sintético; adicionar ATM é um YAML |
 
-Duas coisas ainda **não** estão no repositório, e é deliberado:
+A referência MANE Select de BRCA1 e BRCA2 **está** no repositório, derivada pelo workflow
+[`acquire-reference`](.github/workflows/acquire-reference.yml) num runner do GitHub e commitada de
+volta com `sha256` fixado. O mapa completo de BRCA1 roda hoje:
 
-1. **Coordenadas e sequência de BRCA1/BRCA2.** MANE Select é a única fonte de verdade, e este
-   ambiente não tem acesso de rede ao Ensembl/NCBI. Inventar coordenadas produziria HGVS com
-   aparência correta e conteúdo errado — a falha que a §11 nomeia como a de maior risco de todo o
-   sistema. O carregador **falha explicitamente** em vez de improvisar. Veja
-   [`docs/reference-data.md`](docs/reference-data.md).
-2. **Limiares numéricos curados** da spec ENIGMA. A estrutura do YAML está completa e testada; os
-   números são placeholders marcados `verified: false`, e a CLI se recusa a escrever um mapa a
-   partir deles sem `--allow-unverified`.
+```
+135.935 linhas · 4,5 MB · 3.474 perfis de evidência distintos (97,4% reusados)
+```
 
-Para materializar a referência sem depender do egresso da sessão, o workflow
-[`acquire-reference`](.github/workflows/acquire-reference.yml) roda a aquisição num runner do GitHub
-— que tem rede irrestrita — usando a CLI deste próprio repositório, verifica os invariantes de
-cardinalidade da §11 contra os transcritos reais, e só então publica o artifact. Duas toques na aba
-Actions. Detalhes em [`docs/data-acquisition.md`](docs/data-acquisition.md).
+| consequência | classe | variantes | lacuna média p/ LP |
+|---|---|---:|---:|
+| missense | VUS | 107.038 | 5,7 |
+| inframe_deletion | VUS | 8.122 | 3,6 |
+| intronic | VUS | 7.392 | 6,0 |
+| nonsense | **LP** | 5.415 | — |
+| frameshift | **LP** | 1.534 | — |
+
+**Leia esse mapa com cuidado.** Ele foi computado com **zero fontes de evidência carregadas** — sem
+gnomAD, dbNSFP, SpliceAI, MAVE ou ClinVar. Os 6.949 resolvidos são exclusivamente PVS1: nonsense e
+frameshift com PTC em zona competente de NMD. E os 128.986 restantes saem todos como
+`MISSING_FUNCTIONAL` porque PS3/BS3 se aplicam a qualquer consequência e ocupam o topo de
+`blocking.priority` — **é o mapa medindo a própria ausência de dados**, não um achado sobre BRCA1.
+
+O que é achado de verdade aqui é o relatório `available_uningested`, que diz onde o trabalho está:
+
+| evidência que falta | alvo | variantes |
+|---|---|---:|
+| BA1 (frequência) | LB | 128.986 |
+| BS1 (frequência) | LB | 127.360 |
+| BP4 (preditor) | LB | 88.471 |
+| PS1+PM5 (ClinVar) | LP | 88.471 |
+
+Tudo isso é ingestão, não bancada. Falta ainda:
+
+**Limiares numéricos curados** da spec ENIGMA. A estrutura do YAML está completa e testada; os
+números são placeholders marcados `verified: false`, e a CLI se recusa a escrever um mapa a partir
+deles sem `--allow-unverified` — que é o que o número acima usou.
+
+Detalhes de como obter cada fonte em [`docs/data-acquisition.md`](docs/data-acquisition.md).
 
 Tudo o que não depende desses dois roda hoje, sobre genes sintéticos, com 202 testes.
 
