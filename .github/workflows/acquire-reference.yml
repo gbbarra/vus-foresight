@@ -1,13 +1,12 @@
 name: acquire-reference
 
 # Fetch the external reference data on a GitHub runner, which has unrestricted
-# network access, and publish the result as a workflow artifact.
+# network access, and commit the result back to the branch.
 #
 # This exists because a Claude Code session's egress is governed by the
 # environment's network policy, and the genomics hosts are frequently not on it
 # while GitHub always is. Rather than treat that as a blocker, the acquisition
-# runs where the network is and the session reads the artifact back through the
-# GitHub hosts it can already reach.
+# runs where the network is and the result lands in the repository.
 #
 # It is also simply a better way to acquire reference data than a curator
 # running curl by hand: the run is logged, the inputs are recorded, the parsing
@@ -21,8 +20,9 @@ on:
     inputs:
       code_ref:
         description: >-
-          Branch or tag holding the CLI this workflow calls. Set to main once
-          the pull request has merged.
+          Branch or tag holding the CLI this workflow calls, and the branch the
+          derived reference is committed to. Set to main once the pull request
+          has merged.
         required: true
         default: 'claude/brca-evidence-gap-map-vyaubj'
       mane_release:
@@ -48,7 +48,10 @@ on:
         default: true
 
 permissions:
-  contents: read
+  # The derived reference is committed back to code_ref: the transcript FASTAs
+  # are ~19 KB for both genes and belong in version control next to the
+  # coordinates they are checksummed against, not in an artifact that expires.
+  contents: write
 
 jobs:
   acquire:
@@ -81,7 +84,7 @@ jobs:
           VERSION: ${{ inputs.mane_version }}
         run: |
           set -euo pipefail
-          mkdir -p raw data/reference
+          mkdir -p raw reference
           BASE="https://ftp.ncbi.nlm.nih.gov/refseq/MANE/MANE_human/${RELEASE}"
           # The RefSeq genomic GTF is the one keyed by NM_ accessions, which is
           # what the gene configs name. The Ensembl one uses ENST identifiers
@@ -105,7 +108,7 @@ jobs:
               --gene "config/genes/${gene}.yaml" \
               --gtf raw/mane.refseq_genomic.gtf.gz \
               --fasta raw/mane.refseq_rna.fna.gz \
-              --out-dir data/reference
+              --out-dir reference
             echo "::endgroup::"
           done
 
@@ -117,10 +120,10 @@ jobs:
           IFS=',' read -ra LIST <<< "$GENES"
           for gene in "${LIST[@]}"; do
             gene="$(echo "$gene" | xargs)"
-            vus-foresight enumerate --gene "config/genes/${gene}.yaml" --data-root data
+            vus-foresight enumerate --gene "config/genes/${gene}.yaml"
           done
           # The exact cardinalities of spec section 11. If the coordinates are
-          # wrong, this is where it shows -- before anything is published.
+          # wrong, this is where it shows -- before anything is committed.
           pytest -q -m requires_reference tests/layer1_enumeration
 
       - name: Build dated ClinVar snapshots
@@ -187,16 +190,35 @@ jobs:
             snapshot="$(ls -1 data/snapshots/clinvar_*_${gene}.tsv 2>/dev/null | tail -1 || true)"
             if [ -n "$snapshot" ]; then
               vus-foresight data check --gene "config/genes/${gene}.yaml" \
-                --data-root data --clinvar "$snapshot"
+                --clinvar "$snapshot"
             else
-              vus-foresight data check --gene "config/genes/${gene}.yaml" --data-root data
+              vus-foresight data check --gene "config/genes/${gene}.yaml"
             fi
           done
 
+      - name: Commit the derived reference back to the branch
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/genes/*.yaml reference/*.fa
+          if git diff --cached --quiet; then
+            echo "reference already pinned and unchanged"
+            exit 0
+          fi
+          git commit -m "Pin the MANE Select reference derived by run ${GITHUB_RUN_ID}
+
+          Coordinates and transcript sequence extracted from MANE by this
+          repository's own CLI, with the section 11 cardinalities verified
+          against the result before this commit was made."
+          # Rebase rather than force: a human may have pushed while this ran.
+          git pull --rebase origin "$CODE_REF"
+          git push origin "HEAD:$CODE_REF"
+
       - name: Show the populated gene configs
         run: |
-          # These are small and belong in version control. Copy them out of the
-          # log into a commit, or take them from the artifact.
           for f in config/genes/*.yaml; do
             echo "::group::$f"; cat "$f"; echo "::endgroup::"
           done
@@ -210,7 +232,7 @@ jobs:
         with:
           name: vus-foresight-reference
           path: |
-            data/reference/
+            reference/
             data/snapshots/
             config/genes/
           retention-days: 30
