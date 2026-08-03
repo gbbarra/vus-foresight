@@ -85,6 +85,15 @@ def _load_reference(gene_path: Path, data_root: Path):
     except ReferenceUnavailable as exc:
         typer.secho(str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2) from None
+    if config.flanks is not None and flanks.is_empty:
+        # Degraded, not failed: every intronic position is still enumerated,
+        # each marked reference_base_unknown rather than given a guessed allele.
+        typer.secho(
+            f"  note: {config.flanks.path} is not present; intronic rows will carry "
+            "reference_base_unknown",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
     return config, transcript, flanks
 
 

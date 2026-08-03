@@ -135,6 +135,36 @@ def test_locate_cds_refuses_an_ambiguous_reading_frame():
         locate_cds("ACGTACGTACGT", 9)
 
 
+def test_a_declared_but_missing_flank_file_degrades_rather_than_fails(
+    tmp_path, minus_gene
+):
+    """Flanks are optional by design, so the loader must not contradict that.
+
+    The intronic enumeration's cardinality does not depend on the reference
+    base; without flanks it emits every position and marks each row
+    ``reference_base_unknown``. Refusing to enumerate at all would make a
+    documented degraded mode unreachable.
+    """
+    from vus_foresight.genome.reference import SequenceResource, load_flanks
+    from vus_foresight.testing import synthetic_gene_config
+
+    config = synthetic_gene_config(minus_gene).model_copy(
+        update={"flanks": SequenceResource(path="never_materialised.tsv")}
+    )
+    assert load_flanks(config, data_root=tmp_path).is_empty
+    with pytest.raises(ReferenceUnavailable, match="is missing"):
+        load_flanks(config, data_root=tmp_path, required=True)
+
+
+def test_enumeration_is_complete_without_flanks(minus_gene):
+    from vus_foresight.enumeration import enumerate_intronic_snvs, intronic_snv_positions
+
+    positions = intronic_snv_positions(minus_gene.transcript, flank_bp=50)
+    variants = list(enumerate_intronic_snvs(minus_gene.transcript, None, flank_bp=50))
+    assert len(variants) == 4 * len(positions)
+    assert all(v.attributes.get("reference_base_unknown") == "true" for v in variants)
+
+
 def test_read_fasta_refuses_a_multi_record_file(tmp_path):
     path = tmp_path / "two.fa"
     path.write_text(">a\nACGT\n>b\nTGCA\n", encoding="ascii")

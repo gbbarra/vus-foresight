@@ -265,19 +265,32 @@ def build_transcript(config: GeneConfig, *, data_root: str | Path = ".") -> Tran
     return transcript
 
 
-def load_flanks(config: GeneConfig, *, data_root: str | Path = ".") -> FlankSequences:
+def load_flanks(
+    config: GeneConfig, *, data_root: str | Path = ".", required: bool = False
+) -> FlankSequences:
     """Load intronic flanking bases, if the gene config declares them.
 
     The file is a two-column TSV of ``genomic_position<TAB>plus_strand_base``,
-    or a JSON object of the same mapping. Absent flanks are not an error: the
-    intronic enumeration still yields every position, it simply cannot name a
-    reference allele there.
+    or a JSON object of the same mapping.
+
+    **Absent flanks are not an error.** The intronic enumeration still yields
+    every position -- its cardinality does not depend on the reference base --
+    it simply cannot name a reference allele, and marks those rows
+    ``reference_base_unknown`` instead of guessing one. A gene config declaring
+    a flank resource that has not been materialised is therefore a degraded run,
+    not a failed one, and refusing to enumerate at all would contradict the
+    design the marker exists to serve.
+
+    Pass ``required=True`` where the caller genuinely cannot proceed without
+    them.
     """
     if config.flanks is None:
         return FlankSequences()
     target = config.flanks.resolve(Path(data_root))
     if not target.exists():
-        raise ReferenceUnavailable(f"declared flank resource {target} is missing")
+        if required:
+            raise ReferenceUnavailable(f"declared flank resource {target} is missing")
+        return FlankSequences()
     if target.suffix == ".json":
         with target.open("r", encoding="ascii") as handle:
             raw = json.load(handle)
