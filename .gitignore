@@ -20,3 +20,10 @@ dist/
 .ruff_cache/
 .venv/
 venv/
+
+# Artefatos das ferramentas de qualidade
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.mutmut-cache/

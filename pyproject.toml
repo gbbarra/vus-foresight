@@ -19,7 +19,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "hypothesis>=6.100"]
+# Everything the quality gates need. All development-only: the runtime
+# dependency set above is what a consumer installs, and it does not grow.
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+    "pytest-cov>=5.0",
+    "pytest-bdd>=7.0",
+    "ruff>=0.16",
+    "mypy>=1.11",
+    "types-PyYAML>=6.0",
+    "bandit>=1.7",
+    "detect-secrets>=1.5",
+    "radon>=6.0",
+]
+# Mutation testing is deliberately not in dev: it is slow, run on demand when a
+# module is closed rather than in the development loop, and pinning it into
+# every install invites running it by accident.
+mutation = ["mutmut>=3.0"]
 
 [project.scripts]
 vus-foresight = "vus_foresight.cli:app"
@@ -41,3 +58,76 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Selected explicitly rather than taken from the installed version's defaults.
+# A gate whose rule set moves when the tool is upgraded fails for reasons that
+# have nothing to do with the commit, which is the opposite of what this
+# project claims about reproducibility.
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # import order
+    "UP",       # pyupgrade
+    "B",        # bugbear
+    "C4",       # comprehensions
+    "SIM",      # simplify
+    "PIE",
+    "FLY",
+    "RUF",
+]
+ignore = [
+    # Line length is the formatter's job. Leaving it selected means a long URL
+    # in a comment fails the gate while the formatter refuses to fix it.
+    "E501",
+    # Timestamps here are deliberately naive and fixed (a 1970 epoch) because
+    # two runs that differ only in their clock are not reproducible, and the
+    # determinism test compares bytes. A tz-aware default would defeat that.
+    "DTZ",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# typer.Option(...) as a parameter default IS the framework's interface. B008
+# is right in general and wrong here; the alternative is a sentinel plus a
+# lookup in every command body.
+"src/vus_foresight/cli.py" = ["B008", "UP007", "UP045"]
+# UP007/UP045 are held back on the CLI for a sequencing reason: Typer resolves
+# these annotations at runtime to build the parser, and the CLI currently has
+# no test at all. They come off in the phase that gives it one.
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+# pyarrow ships neither stubs nor py.typed. Only the Parquet writer touches it,
+# and its schema is asserted by the determinism test rather than by types.
+module = ["pyarrow.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+branch = true
+source = ["src/vus_foresight"]
+
+[tool.coverage.report]
+# Per the standard: coverage measures absence, so it should not be diluted by
+# lines that cannot carry a decision.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+    # A Protocol or stub body, and nothing else. Anchored on purpose: an
+    # unanchored ellipsis also matches 'typer.Option(...)' and 'tuple[X, ...]',
+    # which would quietly excuse 18 real lines in the CLI alone -- the module
+    # with the least coverage in the project. An exclusion that hides the
+    # uncovered code is worse than no exclusion.
+    "^\\s*\\.\\.\\.\\s*$",
+]
+show_missing = true
