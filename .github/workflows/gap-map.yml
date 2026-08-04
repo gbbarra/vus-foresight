@@ -121,15 +121,39 @@ jobs:
           # out of the whole pipeline consistently instead of half of it.
           : > data/snapshot_dates.txt
 
+          ARCHIVE="https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive"
+          requested=0
+          obtained=0
+
           IFS=',' read -ra MONTH_LIST <<< "$MONTHS"
           for month in "${MONTH_LIST[@]}"; do
             month="$(echo "$month" | xargs)"
+            [ -n "$month" ] || continue
+            requested=$((requested + 1))
             echo "::group::ClinVar $month"
-            curl -fSL --retry 3 -o "raw/vs_${month}.txt.gz" \
-              "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive/variant_summary_${month}.txt.gz" \
-              || { echo "::warning::archive month $month unavailable"; echo "::endgroup::"; continue; }
+            # NCBI files the archive under a per-year directory. The flat path
+            # is tried as a fallback because older documentation cites it and
+            # the layout has moved once already; a 404 on one is not a reason to
+            # give up on the month.
+            year="${month%%-*}"
+            got=""
+            for url in "${ARCHIVE}/${year}/variant_summary_${month}.txt.gz" \
+                       "${ARCHIVE}/variant_summary_${month}.txt.gz"; do
+              if curl -fSL --retry 3 -o "raw/vs_${month}.txt.gz" "$url"; then
+                got="$url"; break
+              fi
+            done
+            if [ -z "$got" ]; then
+              echo "::warning::archive month $month unavailable; the archive offers:"
+              curl -sL "${ARCHIVE}/${year}/" | grep -o 'variant_summary_[0-9-]*\.txt\.gz' \
+                | sort -u | head -20 || true
+              echo "::endgroup::"
+              continue
+            fi
+            echo "fetched $got"
             build_for "raw/vs_${month}.txt.gz" "${month}-01"
             echo "${month}-01" >> data/snapshot_dates.txt
+            obtained=$((obtained + 1))
             rm -f "raw/vs_${month}.txt.gz"
             echo "::endgroup::"
           done
@@ -149,6 +173,17 @@ jobs:
           # timeline needs regardless of how the input was written.
           sort -u -o data/snapshot_dates.txt data/snapshot_dates.txt
           echo "snapshot dates:"; cat data/snapshot_dates.txt
+
+          # Fail here rather than three steps later. Asking for archive months
+          # and getting none means the timeline and the section 10 study cannot
+          # run at all -- and they would each emit a ::warning:: and let the run
+          # go green, which reads as "done" for a run that produced half of what
+          # was asked for. A single-snapshot run is legitimate only when nobody
+          # asked for a series.
+          if [ "$requested" -gt 0 ] && [ "$obtained" -eq 0 ]; then
+            echo "::error::none of the $requested requested archive month(s) could be fetched, so there is no series to diff and no study to run. Check the months against the listing above."
+            exit 1
+          fi
 
       - name: Compute a map per gene per snapshot
         env:
