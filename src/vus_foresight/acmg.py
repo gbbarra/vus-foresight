@@ -189,11 +189,7 @@ class PointSystem(BaseModel):
 
     def points_for(self, direction: Direction, strength: Strength) -> int:
         """Signed points contributed by one criterion at one strength."""
-        table = (
-            self.pathogenic_points
-            if direction is Direction.PATHOGENIC
-            else self.benign_points
-        )
+        table = self.pathogenic_points if direction is Direction.PATHOGENIC else self.benign_points
         try:
             return table[strength]
         except KeyError as exc:  # pragma: no cover - guarded by spec validation
@@ -228,11 +224,7 @@ class PointSystem(BaseModel):
 
     def max_strength_points(self, direction: Direction) -> int:
         """Largest magnitude a single criterion can contribute in a direction."""
-        table = (
-            self.pathogenic_points
-            if direction is Direction.PATHOGENIC
-            else self.benign_points
-        )
+        table = self.pathogenic_points if direction is Direction.PATHOGENIC else self.benign_points
         return max(abs(v) for v in table.values())
 
 

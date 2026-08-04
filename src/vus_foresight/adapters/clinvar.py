@@ -293,9 +293,7 @@ class ClinVarSnapshotAdapter(Adapter):
         min_stars: int = 1,
     ) -> "ClinVarSnapshotAdapter":
         version = snapshot_date.isoformat() if snapshot_date else Path(path).stem
-        return cls(
-            ClinVarSnapshot.read(path, snapshot_date), version, min_stars=min_stars
-        )
+        return cls(ClinVarSnapshot.read(path, snapshot_date), version, min_stars=min_stars)
 
     def lookup(self, variant: Variant, transcript: Transcript) -> dict[str, Any]:
         return self.snapshot.resolve(variant, min_stars=self.min_stars)

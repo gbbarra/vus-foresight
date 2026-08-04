@@ -36,9 +36,7 @@ def equivalence_key(variant: Variant, evaluation: Evaluation, spec: VCEPSpec) ->
 
     applied = ";".join(f"{c.code}:{c.strength.value}" for c in evaluation.applied)
     unevaluable = ";".join(
-        s.code
-        for s in evaluation.skipped
-        if s.outcome is CriterionOutcome.NOT_EVALUABLE
+        s.code for s in evaluation.skipped if s.outcome is CriterionOutcome.NOT_EVALUABLE
     )
     return "|".join(
         [

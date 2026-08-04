@@ -118,13 +118,9 @@ class CriterionSpec(BaseModel):
                 "never sees the observation that would satisfy one"
             )
         if self.evidence_class is not EvidenceClass.EXTRINSIC and self.rule is None:
-            raise ValueError(
-                f"{self.code}: intrinsic and semi-intrinsic criteria need a rule"
-            )
+            raise ValueError(f"{self.code}: intrinsic and semi-intrinsic criteria need a rule")
         if self.evidence_class is EvidenceClass.EXTRINSIC and self.feasibility is None:
-            raise ValueError(
-                f"{self.code}: extrinsic criteria must declare a feasibility tag"
-            )
+            raise ValueError(f"{self.code}: extrinsic criteria must declare a feasibility tag")
         for rung in self.strength_ladder:
             if self.direction is Direction.PATHOGENIC and rung.strength is Strength.STAND_ALONE:
                 raise ValueError(f"{self.code}: stand-alone is a benign-only strength")

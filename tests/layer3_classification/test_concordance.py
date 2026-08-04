@@ -111,9 +111,7 @@ def test_validate_scores_a_synthetic_cohort(minus_gene, minus_config, toy_spec):
         adapters=default_registry(minus_config),
         computed_at=datetime(1970, 1, 1),
     )
-    rows = [
-        r.row for r in runner.run(list(enumerate_coding_snvs(minus_gene.transcript))[:40])
-    ]
+    rows = [r.row for r in runner.run(list(enumerate_coding_snvs(minus_gene.transcript))[:40])]
     vus_rows = [row for row in rows if row.class_current is ACMGClass.UNCERTAIN]
     assert vus_rows, "the fixture should leave some variants uncertain"
 

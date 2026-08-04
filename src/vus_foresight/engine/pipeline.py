@@ -73,9 +73,7 @@ class MapRunner:
         an adapter supplies; deriving it first would make the tree blind to the
         very data whose absence it is supposed to report.
         """
-        context = EvidenceContext(
-            audit=self.audited_paths if self.audit_context_reads else None
-        )
+        context = EvidenceContext(audit=self.audited_paths if self.audit_context_reads else None)
         for adapter in self.adapters:
             context.merge(
                 adapter.namespace, adapter.lookup(variant, self.transcript), adapter.source_id
@@ -87,9 +85,7 @@ class MapRunner:
         )
         return context
 
-    def _assess(
-        self, variant: Variant, context: EvidenceContext
-    ) -> tuple[Evaluation, GapAnalysis]:
+    def _assess(self, variant: Variant, context: EvidenceContext) -> tuple[Evaluation, GapAnalysis]:
         """Evaluate and analyse, reusing the result across identical profiles.
 
         The reuse is exact rather than approximate: the signature covers every
@@ -157,9 +153,7 @@ class MapRunner:
         self._extra_sources[namespace] = source_id
 
 
-def default_registry(
-    gene: GeneConfig, *, extra: Iterable[Adapter] = ()
-) -> AdapterRegistry:
+def default_registry(gene: GeneConfig, *, extra: Iterable[Adapter] = ()) -> AdapterRegistry:
     """The three computed adapters, plus whatever file-backed ones are supplied."""
     from ..adapters.builtin import RegionAdapter, TranscriptAdapter, VariantAdapter
 

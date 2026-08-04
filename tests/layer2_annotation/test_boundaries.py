@@ -88,21 +88,16 @@ def test_canonical_donor_and_acceptor_dinucleotides_are_gt_and_ag(both_strands, 
     gene = both_strands[strand]
     transcript = gene.transcript
     for intron in transcript.introns:
-        donor = "".join(
-            gene.flanks.base_at(transcript, intron, n) for n in (1, 2)
-        )
+        donor = "".join(gene.flanks.base_at(transcript, intron, n) for n in (1, 2))
         acceptor = "".join(
-            gene.flanks.base_at(transcript, intron, n)
-            for n in (intron.length - 1, intron.length)
+            gene.flanks.base_at(transcript, intron, n) for n in (intron.length - 1, intron.length)
         )
         assert donor == "GT", f"intron {intron.upstream_index} donor is {donor}"
         assert acceptor == "AG", f"intron {intron.upstream_index} acceptor is {acceptor}"
 
 
 @pytest.mark.parametrize("strand", STRANDS)
-def test_exonic_splice_region_covers_three_bases_at_each_abutting_edge(
-    both_strands, strand
-):
+def test_exonic_splice_region_covers_three_bases_at_each_abutting_edge(both_strands, strand):
     transcript = both_strands[strand].transcript
     region = transcript.exonic_splice_region_tx
     bounds = transcript._exon_tx_bounds
@@ -141,11 +136,7 @@ def test_inframe_deletion_is_shifted_to_the_most_3_prime_position(both_strands, 
     transcript = both_strands[strand].transcript
     cds = transcript.cds
     # Any two positions three apart with the same base give a shiftable deletion.
-    shiftable = [
-        p
-        for p in range(4, transcript.cds_length - 9)
-        if cds[p - 1] == cds[p + 2]
-    ]
+    shiftable = [p for p in range(4, transcript.cds_length - 9) if cds[p - 1] == cds[p + 2]]
     assert shiftable, "the fixture should contain a shiftable 3 nt deletion"
     start = shiftable[0]
     variant = annotate_inframe_deletion(transcript, start, 3)

@@ -101,9 +101,7 @@ def compute_pvs1(
                 ),
             )
             return result
-        disrupted = (
-            prediction is not MISSING and prediction >= config.splice_prediction_threshold
-        )
+        disrupted = prediction is not MISSING and prediction >= config.splice_prediction_threshold
         if not disrupted:
             result.update(
                 applicable=False,
@@ -137,9 +135,7 @@ def compute_pvs1(
     protein_length = transcript.protein_length
     escapes = transcript.ptc_escapes_nmd(ptc)
     fraction_removed = (protein_length - ptc + 1) / protein_length
-    critical, region_names = _removes_critical_region(
-        gene, config, ptc, protein_length
-    )
+    critical, region_names = _removes_critical_region(gene, config, ptc, protein_length)
 
     result.update(
         applicable=True,
@@ -173,13 +169,11 @@ def compute_pvs1(
     elif fraction_removed >= config.min_fraction_removed:
         result["strength"] = config.nmd_escape_large_strength.value
         result["rationale"] = (
-            f"PTC at codon {ptc} escapes NMD and removes "
-            f"{fraction_removed:.1%} of the protein"
+            f"PTC at codon {ptc} escapes NMD and removes {fraction_removed:.1%} of the protein"
         )
     else:
         result["strength"] = config.nmd_escape_small_strength.value
         result["rationale"] = (
-            f"PTC at codon {ptc} escapes NMD and removes only "
-            f"{fraction_removed:.1%} of the protein"
+            f"PTC at codon {ptc} escapes NMD and removes only {fraction_removed:.1%} of the protein"
         )
     return result

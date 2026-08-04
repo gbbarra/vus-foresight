@@ -132,9 +132,7 @@ class Variant(BaseModel):
 
     @field_validator("consequence_terms", mode="after")
     @classmethod
-    def _primary_term_first(
-        cls, value: tuple[Consequence, ...], info
-    ) -> tuple[Consequence, ...]:
+    def _primary_term_first(cls, value: tuple[Consequence, ...], info) -> tuple[Consequence, ...]:
         primary = info.data.get("consequence")
         if value and primary is not None and value[0] != primary:
             raise ValueError("consequence_terms[0] must equal consequence")

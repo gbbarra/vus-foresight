@@ -28,9 +28,7 @@ def _write_resources(tmp_path, gene, name="TOY1"):
     fasta = tmp_path / f"{name}.fa"
     fasta.write_text(
         f">{transcript.transcript_id}\n"
-        + "\n".join(
-            transcript.sequence[i : i + 60] for i in range(0, len(transcript.sequence), 60)
-        )
+        + "\n".join(transcript.sequence[i : i + 60] for i in range(0, len(transcript.sequence), 60))
         + "\n",
         encoding="ascii",
     )
@@ -88,9 +86,7 @@ def test_import_round_trips_to_the_original_transcript(tmp_path, both_strands, s
     assert rebuilt.strand == gene.transcript.strand
 
 
-def test_import_records_a_digest_that_later_runs_are_checked_against(
-    tmp_path, minus_gene
-):
+def test_import_records_a_digest_that_later_runs_are_checked_against(tmp_path, minus_gene):
     fasta, exons = _write_resources(tmp_path, minus_gene)
     config_path = _write_config(tmp_path, minus_gene)
     import_reference(
@@ -121,9 +117,7 @@ def test_import_refuses_a_mismatched_exon_count(tmp_path, minus_gene):
     lines = exons.read_text(encoding="utf-8").splitlines()
     exons.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
     with pytest.raises(ReferenceUnavailable, match="exons"):
-        import_reference(
-            load_gene_config(config_path), sequence_path=fasta, exon_table_path=exons
-        )
+        import_reference(load_gene_config(config_path), sequence_path=fasta, exon_table_path=exons)
 
 
 def test_locate_cds_refuses_an_ambiguous_reading_frame():
@@ -135,9 +129,7 @@ def test_locate_cds_refuses_an_ambiguous_reading_frame():
         locate_cds("ACGTACGTACGT", 9)
 
 
-def test_a_declared_but_missing_flank_file_degrades_rather_than_fails(
-    tmp_path, minus_gene
-):
+def test_a_declared_but_missing_flank_file_degrades_rather_than_fails(tmp_path, minus_gene):
     """Flanks are optional by design, so the loader must not contradict that.
 
     The intronic enumeration's cardinality does not depend on the reference
@@ -252,9 +244,7 @@ def test_write_back_is_idempotent(tmp_path, minus_gene):
     assert run() == first, "a second import must not churn the file"
 
 
-def test_write_back_replaces_a_stale_exon_list_rather_than_appending(
-    tmp_path, minus_gene
-):
+def test_write_back_replaces_a_stale_exon_list_rather_than_appending(tmp_path, minus_gene):
     from vus_foresight.genome.importer import splice_derived
 
     fasta, exons = _write_resources(tmp_path, minus_gene)

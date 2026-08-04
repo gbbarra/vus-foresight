@@ -97,9 +97,7 @@ def test_intronic_snvs_are_three_per_known_position(both_strands, strand):
 
 
 @pytest.mark.parametrize("strand", STRANDS)
-def test_intronic_snvs_without_flanks_emit_four_alternatives_and_say_so(
-    both_strands, strand
-):
+def test_intronic_snvs_without_flanks_emit_four_alternatives_and_say_so(both_strands, strand):
     """Positional coverage stays complete; the unknown reference is declared."""
     transcript = both_strands[strand].transcript
     positions = intronic_snv_positions(transcript, flank_bp=50)
@@ -116,10 +114,7 @@ def test_alternative_codons_are_exactly_the_54_multi_nucleotide_ones():
         assert len({alt for alt, _ in alternatives}) == 54
         # 63 alternatives in total, 9 of which are single-nucleotide.
         single = [
-            "".join(ref[:i] + b + ref[i + 1 :])
-            for i in range(3)
-            for b in BASES
-            if b != ref[i]
+            "".join(ref[:i] + b + ref[i + 1 :]) for i in range(3) for b in BASES if b != ref[i]
         ]
         assert len(single) == 9
         assert not {alt for alt, _ in alternatives} & set(single)

@@ -76,8 +76,7 @@ class Transition:
     @property
     def resolved(self) -> bool:
         return (
-            self.class_before is ACMGClass.UNCERTAIN
-            and self.class_after is not ACMGClass.UNCERTAIN
+            self.class_before is ACMGClass.UNCERTAIN and self.class_after is not ACMGClass.UNCERTAIN
         )
 
     @property
@@ -195,8 +194,7 @@ class TimelineDiff:
         ]
         if self.appeared or self.disappeared:
             lines.append(
-                f"  rows appeared {len(self.appeared):,}, "
-                f"disappeared {len(self.disappeared):,}"
+                f"  rows appeared {len(self.appeared):,}, disappeared {len(self.disappeared):,}"
             )
         for cause, count in self.counts_by_cause().items():
             lines.append(f"    {cause:22s} {count:>8,}")
@@ -319,7 +317,5 @@ def compare_series(
             label_before=label_older,
             label_after=label_newer,
         )
-        for (label_older, older), (label_newer, newer) in zip(
-            snapshots, snapshots[1:]
-        )
+        for (label_older, older), (label_newer, newer) in zip(snapshots, snapshots[1:])
     ]

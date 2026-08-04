@@ -50,9 +50,7 @@ def canonical(value: Any) -> Any:
     return repr(value)
 
 
-def evidence_signature(
-    variant: Variant, context: EvidenceContext, footprint: Sequence[str]
-) -> str:
+def evidence_signature(variant: Variant, context: EvidenceContext, footprint: Sequence[str]) -> str:
     """A digest of everything that can influence this variant's evaluation.
 
     ``footprint`` must be :attr:`VCEPSpec.field_footprint`. Consequence terms are

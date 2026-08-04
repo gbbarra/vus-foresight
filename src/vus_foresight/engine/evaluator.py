@@ -78,9 +78,7 @@ class Evaluation:
         The threshold matters: a lone supporting criterion on each side is
         ordinary curation, not a variant blocked by contradictory evidence.
         """
-        pathogenic = sum(
-            c.points for c in self.applied if c.direction is Direction.PATHOGENIC
-        )
+        pathogenic = sum(c.points for c in self.applied if c.direction is Direction.PATHOGENIC)
         benign = -sum(c.points for c in self.applied if c.direction is Direction.BENIGN)
         return pathogenic >= min_points_each and benign >= min_points_each
 
@@ -170,9 +168,7 @@ def _evaluate_one(
     strength = _resolve_strength(criterion, context, log)
     points = spec.points_for(criterion, strength)
     namespaces = {path.split(".", 1)[0] for path in log.touched} or {"engine"}
-    source = ", ".join(
-        sorted({context.sources.get(ns, ns) for ns in namespaces})
-    )
+    source = ", ".join(sorted({context.sources.get(ns, ns) for ns in namespaces}))
     return AppliedCriterion(
         code=criterion.code,
         direction=criterion.direction,
@@ -229,9 +225,7 @@ def _resolve_mutex(
             )
 
 
-def evaluate_variant(
-    variant: Variant, context: EvidenceContext, spec: VCEPSpec
-) -> Evaluation:
+def evaluate_variant(variant: Variant, context: EvidenceContext, spec: VCEPSpec) -> Evaluation:
     """Test every criterion in the specification against one variant."""
     applied: list[AppliedCriterion] = []
     skipped: list[SkippedCriterion] = []

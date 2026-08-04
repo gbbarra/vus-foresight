@@ -172,9 +172,7 @@ class Transcript(BaseModel):
             raise ValueError(f"{self.transcript_id}: CDS end runs past the transcript")
         cds_len = self.cds_end_tx - self.cds_start_tx + 1
         if cds_len % 3 != 0:
-            raise ValueError(
-                f"{self.transcript_id}: CDS length {cds_len} is not a multiple of 3"
-            )
+            raise ValueError(f"{self.transcript_id}: CDS length {cds_len} is not a multiple of 3")
 
         labels = [e.label for e in self.exons]
         if len(set(labels)) != len(labels):
@@ -240,8 +238,7 @@ class Transcript(BaseModel):
         """
         if not 1 <= tx_pos <= self.length:
             raise ValueError(
-                f"transcript position {tx_pos} outside 1..{self.length} for "
-                f"{self.transcript_id}"
+                f"transcript position {tx_pos} outside 1..{self.length} for {self.transcript_id}"
             )
         for exon, (tx_start, tx_end) in zip(self.exons, self._exon_tx_bounds):
             if tx_start <= tx_pos <= tx_end:
@@ -340,9 +337,7 @@ class Transcript(BaseModel):
             anchor = intron.upstream_anchor
             return CPosition(base=anchor.base, offset=n, utr3=anchor.utr3)
         anchor = intron.downstream_anchor
-        return CPosition(
-            base=anchor.base, offset=-(intron.length - n + 1), utr3=anchor.utr3
-        )
+        return CPosition(base=anchor.base, offset=-(intron.length - n + 1), utr3=anchor.utr3)
 
     def intron_genomic(self, intron: IntronSpan, n: int) -> int:
         """Genomic coordinate of the ``n``-th intronic base, counting from the donor."""

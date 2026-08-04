@@ -58,9 +58,7 @@ class Candidate:
         return self.criterion.mutex_group
 
 
-def _resolve_feasibility(
-    criterion: CriterionSpec, context: EvidenceContext
-) -> FeasibilityTag:
+def _resolve_feasibility(criterion: CriterionSpec, context: EvidenceContext) -> FeasibilityTag:
     log = LookupLog()
     for rung in criterion.feasibility_ladder:
         if rung.when.evaluate(context, log):
@@ -83,9 +81,7 @@ def candidate_requirements(
     """
     applied_codes = set(evaluation.applied_codes)
     occupied_groups = {
-        spec.by_code(code).mutex_group
-        for code in applied_codes
-        if spec.by_code(code).mutex_group
+        spec.by_code(code).mutex_group for code in applied_codes if spec.by_code(code).mutex_group
     }
 
     candidates: list[Candidate] = []
@@ -194,9 +190,7 @@ def minimum_sufficient_sets(
             codes = frozenset(c.code for c in combo)
             if any(previous <= codes for previous, _ in accepted):
                 continue
-            requirements = tuple(
-                sorted((c.requirement for c in combo), key=lambda r: r.code)
-            )
+            requirements = tuple(sorted((c.requirement for c in combo), key=lambda r: r.code))
             worst = max(requirements, key=lambda r: FEASIBILITY_COST[r.feasibility])
             accepted.append(
                 (
@@ -291,9 +285,7 @@ class GapAnalysis:
         )
 
 
-def analyse_gap(
-    evaluation: Evaluation, spec: VCEPSpec, context: EvidenceContext
-) -> GapAnalysis:
+def analyse_gap(evaluation: Evaluation, spec: VCEPSpec, context: EvidenceContext) -> GapAnalysis:
     """Run the whole of section 7 for one evaluated variant."""
     candidates = candidate_requirements(evaluation, spec, context)
     points = evaluation.points

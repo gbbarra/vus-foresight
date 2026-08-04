@@ -172,8 +172,7 @@ class ValidationResult:
                 f"2. cause accuracy        {pct(self.cause_accuracy)} "
                 f"(n={self.cause_scored}"
                 + (
-                    f", {self.unobserved_cause} resolved on evidence this "
-                    "pipeline never sees)"
+                    f", {self.unobserved_cause} resolved on evidence this pipeline never sees)"
                     if self.unobserved_cause
                     else ")"
                 ),
@@ -261,9 +260,7 @@ def outcomes_from_snapshots(
     return outcomes
 
 
-def observed_causes_from_diff(
-    diff: "TimelineDiff", spec: "VCEPSpec"
-) -> dict[str, str]:
+def observed_causes_from_diff(diff: "TimelineDiff", spec: "VCEPSpec") -> dict[str, str]:
     """What kind of evidence actually turned up, per variant.
 
     Metric 2 asks whether the predicted ``blocking_reason`` matches the evidence
@@ -387,9 +384,7 @@ def spearman(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     n = len(xs)
     mean_x, mean_y = sum(rx) / n, sum(ry) / n
     numerator = sum((a - mean_x) * (b - mean_y) for a, b in zip(rx, ry))
-    denominator = (
-        sum((a - mean_x) ** 2 for a in rx) * sum((b - mean_y) ** 2 for b in ry)
-    ) ** 0.5
+    denominator = (sum((a - mean_x) ** 2 for a in rx) * sum((b - mean_y) ** 2 for b in ry)) ** 0.5
     if denominator == 0:
         return None
     return numerator / denominator
@@ -535,9 +530,7 @@ class TimeSeriesStudy:
         """
         if not self.resolved_total:
             return None
-        return (
-            len(self.anticipated) + len(self.saw_evidence_only)
-        ) / self.resolved_total
+        return (len(self.anticipated) + len(self.saw_evidence_only)) / self.resolved_total
 
     def summary(self) -> str:
         def pct(value: float | None) -> str:

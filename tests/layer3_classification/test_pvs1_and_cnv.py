@@ -50,9 +50,7 @@ def test_pvs1_is_very_strong_when_nmd_is_triggered(minus_gene, minus_config, toy
         if (v := _nonsense_at(transcript, codon)) is not None
         and not transcript.ptc_escapes_nmd(codon)
     )
-    result = compute_pvs1(
-        early, transcript, minus_config, toy_spec.pvs1, EvidenceContext()
-    )
+    result = compute_pvs1(early, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
     assert result["applicable"] is True
     assert result["nmd_escape"] is False
     assert result["strength"] == Strength.VERY_STRONG.value
@@ -71,9 +69,7 @@ def test_pvs1_drops_to_strong_when_lof_mechanism_is_not_established(
         if (v := _nonsense_at(transcript, codon)) is not None
         and not transcript.ptc_escapes_nmd(codon)
     )
-    result = compute_pvs1(
-        early, transcript, unestablished, toy_spec.pvs1, EvidenceContext()
-    )
+    result = compute_pvs1(early, transcript, unestablished, toy_spec.pvs1, EvidenceContext())
     assert result["strength"] == Strength.STRONG.value
     assert "not_established" in result["rationale"]
 
@@ -90,9 +86,7 @@ def test_pvs1_is_undetermined_for_a_splice_site_without_a_prediction(
         for v in enumerate_intronic_snvs(transcript, minus_gene.flanks)
         if v.consequence is Consequence.SPLICE_DONOR
     )
-    result = compute_pvs1(
-        donor, transcript, minus_config, toy_spec.pvs1, EvidenceContext()
-    )
+    result = compute_pvs1(donor, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
     assert result["applicable"] is False
     assert result["undetermined_reason"] == "splice_prediction_missing"
     assert result["missing_field"] == toy_spec.pvs1.splice_prediction_field
@@ -116,20 +110,15 @@ def test_pvs1_fires_for_a_splice_site_once_the_prediction_is_present(
     assert result["strength"] == Strength.VERY_STRONG.value
 
 
-def test_pvs1_uses_the_critical_region_branch_when_nmd_is_escaped(
-    plus_gene, plus_config, toy_spec
-):
+def test_pvs1_uses_the_critical_region_branch_when_nmd_is_escaped(plus_gene, plus_config, toy_spec):
     transcript = plus_gene.transcript
     late = [
         v
         for codon in range(2, transcript.protein_length + 1)
-        if (v := _nonsense_at(transcript, codon)) is not None
-        and transcript.ptc_escapes_nmd(codon)
+        if (v := _nonsense_at(transcript, codon)) is not None and transcript.ptc_escapes_nmd(codon)
     ]
     assert late, "the fixture should allow an NMD-escaping PTC"
-    result = compute_pvs1(
-        late[0], transcript, plus_config, toy_spec.pvs1, EvidenceContext()
-    )
+    result = compute_pvs1(late[0], transcript, plus_config, toy_spec.pvs1, EvidenceContext())
     assert result["nmd_escape"] is True
     assert result["strength"] in {Strength.STRONG.value, Strength.MODERATE.value}
     assert 0 < result["fraction_removed"] <= 1
@@ -140,9 +129,7 @@ def test_start_loss_is_reported_as_unpredictable(minus_gene, minus_config, toy_s
     variant = annotate_coding_edits(
         transcript, (CodingEdit(cds_position=1, ref=transcript.cds[0], alt="C"),)
     )
-    result = compute_pvs1(
-        variant, transcript, minus_config, toy_spec.pvs1, EvidenceContext()
-    )
+    result = compute_pvs1(variant, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
     assert result["strength"] == toy_spec.pvs1.start_lost_strength.value
     assert "not predictable" in result["rationale"]
 
@@ -152,24 +139,19 @@ def test_start_loss_is_reported_as_unpredictable(minus_gene, minus_config, toy_s
 # --------------------------------------------------------------------------
 
 
-def test_whole_gene_deletion_of_an_established_hi_gene_is_pathogenic(
-    minus_gene, minus_config
-):
+def test_whole_gene_deletion_of_an_established_hi_gene_is_pathogenic(minus_gene, minus_config):
     config = CNVScoringConfig()
     whole = next(
         v
         for v in enumerate_exon_cnvs(minus_gene.transcript)
-        if v.attributes["spans_whole_gene"] == "true"
-        and v.consequence is Consequence.EXON_DELETION
+        if v.attributes["spans_whole_gene"] == "true" and v.consequence is Consequence.EXON_DELETION
     )
     scored = score_cnv(whole, minus_config, config)
     assert scored.section == "2A"
     assert config.classify(scored.score) is ACMGClass.PATHOGENIC
 
 
-def test_whole_gene_duplication_is_not_evidence_of_loss_of_function(
-    minus_gene, minus_config
-):
+def test_whole_gene_duplication_is_not_evidence_of_loss_of_function(minus_gene, minus_config):
     config = CNVScoringConfig()
     whole = next(
         v
@@ -195,9 +177,10 @@ def test_in_frame_and_frame_disrupting_intragenic_deletions_score_differently(
     in_frame = [v for v in deletions if v.attributes["in_frame"] == "true"]
     shifted = [v for v in deletions if v.attributes["in_frame"] == "false"]
     assert in_frame and shifted
-    assert score_cnv(in_frame[0], minus_config, config).score < score_cnv(
-        shifted[0], minus_config, config
-    ).score
+    assert (
+        score_cnv(in_frame[0], minus_config, config).score
+        < score_cnv(shifted[0], minus_config, config).score
+    )
 
 
 def test_cnv_rows_declare_their_own_scoring_framework(minus_gene, minus_config):
@@ -219,9 +202,7 @@ def test_cnv_rows_declare_their_own_scoring_framework(minus_gene, minus_config):
     assert row.source_versions["cnv_framework"] == config.version_string
 
 
-def test_the_pipeline_never_mixes_cnv_rows_into_the_point_scale(
-    minus_gene, minus_config, toy_spec
-):
+def test_the_pipeline_never_mixes_cnv_rows_into_the_point_scale(minus_gene, minus_config, toy_spec):
     from datetime import datetime
 
     from vus_foresight.engine.pipeline import MapRunner, default_registry

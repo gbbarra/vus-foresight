@@ -186,8 +186,7 @@ def _set_scalar(lines: list[str], section: str, key: str, value: int | str) -> l
         if match:
             lines = list(lines)
             lines[i] = (
-                f"{indent}{key}: {_render_scalar(value)}"
-                f"{_trailing_comment(match.group('rest'))}"
+                f"{indent}{key}: {_render_scalar(value)}{_trailing_comment(match.group('rest'))}"
             )
             return lines
     lines = list(lines)
@@ -265,9 +264,7 @@ def _preflight(lines: list[str], text: str) -> None:
     if isinstance(transcript, dict) and "exons" in transcript:
         header, end = _section(lines, "transcript")
         indent = _body_indent(lines, header, end)
-        if not any(
-            lines[i].startswith(f"{indent}exons:") for i in range(header + 1, end)
-        ):
+        if not any(lines[i].startswith(f"{indent}exons:") for i in range(header + 1, end)):
             raise ReferenceUnavailable(
                 "the derived block could not be spliced into the config: 'exons' is "
                 "declared but not as a key on its own line under 'transcript'. Fix "
@@ -321,8 +318,7 @@ def import_reference(
     tc = config.transcript
     if len(exons) != tc.exon_count:
         raise ReferenceUnavailable(
-            f"{config.gene}: exon table has {len(exons)} exons, config declares "
-            f"{tc.exon_count}"
+            f"{config.gene}: exon table has {len(exons)} exons, config declares {tc.exon_count}"
         )
     if tc.exon_labels and tuple(e.label for e in exons) != tc.exon_labels:
         raise ReferenceUnavailable(
@@ -342,9 +338,7 @@ def import_reference(
         {
             "cds_start_tx": cds_start,
             "cds_end_tx": cds_end,
-            "exons": [
-                {"label": e.label, "start": e.start, "end": e.end} for e in exons
-            ],
+            "exons": [{"label": e.label, "start": e.start, "end": e.end} for e in exons],
             "sequence_sha256": hashlib.sha256(sequence.encode("ascii")).hexdigest(),
             "sequence_length": len(sequence),
         }

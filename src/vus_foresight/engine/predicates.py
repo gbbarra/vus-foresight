@@ -66,9 +66,7 @@ class Leaf(BaseModel):
     @model_validator(mode="after")
     def _known_operator(self) -> "Leaf":
         if self.op not in OPERATORS:
-            raise ValueError(
-                f"unknown operator {self.op!r}; available: {sorted(OPERATORS)}"
-            )
+            raise ValueError(f"unknown operator {self.op!r}; available: {sorted(OPERATORS)}")
         return self
 
     def evaluate(self, context: EvidenceContext, log: LookupLog) -> bool:
@@ -81,8 +79,7 @@ class Leaf(BaseModel):
             # A comparison between incompatible types is a specification bug,
             # but it must not be able to make a rule fire.
             raise ValueError(
-                f"cannot apply {self.op!r} to {self.field}={observed!r} "
-                f"and value={self.value!r}"
+                f"cannot apply {self.op!r} to {self.field}={observed!r} and value={self.value!r}"
             ) from None
 
 
@@ -107,9 +104,7 @@ class RuleNode(BaseModel):
     @model_validator(mode="after")
     def _exactly_one(self) -> "RuleNode":
         set_fields = [
-            name
-            for name in ("all", "any", "none", "leaf")
-            if getattr(self, name) is not None
+            name for name in ("all", "any", "none", "leaf") if getattr(self, name) is not None
         ]
         if len(set_fields) != 1:
             raise ValueError(
@@ -146,9 +141,7 @@ class RuleNode(BaseModel):
 RuleNode.model_rebuild()
 
 
-def evaluate_rule(
-    rule: RuleNode | None, context: EvidenceContext
-) -> tuple[bool, LookupLog]:
+def evaluate_rule(rule: RuleNode | None, context: EvidenceContext) -> tuple[bool, LookupLog]:
     """Evaluate a rule and return the verdict together with its lookup log."""
     log = LookupLog()
     if rule is None:

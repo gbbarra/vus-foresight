@@ -45,9 +45,7 @@ def test_c_coordinates_increase_monotonically_within_each_exon(both_strands, str
 
 
 @pytest.mark.parametrize("strand", STRANDS)
-def test_translation_of_the_mutant_cds_matches_the_predicted_protein(
-    both_strands, strand
-):
+def test_translation_of_the_mutant_cds_matches_the_predicted_protein(both_strands, strand):
     """Independent path: apply the edit to the CDS, translate, compare.
 
     This never calls the annotator's consequence logic -- it rebuilds the coding
@@ -62,9 +60,7 @@ def test_translation_of_the_mutant_cds_matches_the_predicted_protein(
             variant = annotate_coding_edits(
                 transcript, (CodingEdit(cds_position=cds_position, ref=ref, alt=alt),)
             )
-            mutant = (
-                transcript.cds[: cds_position - 1] + alt + transcript.cds[cds_position:]
-            )
+            mutant = transcript.cds[: cds_position - 1] + alt + transcript.cds[cds_position:]
             codon_index = (cds_position - 1) // 3 + 1
             expected_aa = translate(mutant)[codon_index - 1]
             assert variant.alt_aa == expected_aa
@@ -103,11 +99,7 @@ def test_strand_symmetry_of_the_transcript_level_annotation(plus_gene, minus_gen
     plus = [
         annotate_coding_edits(
             plus_gene.transcript,
-            (
-                CodingEdit(
-                    cds_position=p, ref=plus_gene.transcript.cds[p - 1], alt=a
-                ),
-            ),
+            (CodingEdit(cds_position=p, ref=plus_gene.transcript.cds[p - 1], alt=a),),
         )
         for p in range(1, plus_gene.transcript.cds_length + 1, 5)
         for a in "ACGT"
@@ -116,11 +108,7 @@ def test_strand_symmetry_of_the_transcript_level_annotation(plus_gene, minus_gen
     minus = [
         annotate_coding_edits(
             minus_gene.transcript,
-            (
-                CodingEdit(
-                    cds_position=p, ref=minus_gene.transcript.cds[p - 1], alt=a
-                ),
-            ),
+            (CodingEdit(cds_position=p, ref=minus_gene.transcript.cds[p - 1], alt=a),),
         )
         for p in range(1, minus_gene.transcript.cds_length + 1, 5)
         for a in "ACGT"
@@ -134,9 +122,7 @@ def test_strand_symmetry_of_the_transcript_level_annotation(plus_gene, minus_gen
 
 
 @pytest.mark.parametrize("strand", STRANDS)
-def test_mnv_translates_the_whole_codon_not_the_component_substitutions(
-    both_strands, strand
-):
+def test_mnv_translates_the_whole_codon_not_the_component_substitutions(both_strands, strand):
     """The failure mode spec section 11 calls the likeliest in the whole layer.
 
     A codon where two separate substitutions give amino acids X and Y, but the
@@ -246,9 +232,7 @@ def test_intron_numbering_splits_at_the_midpoint(both_strands, strand):
 
     assert transcript.intron_c_position(intron, 1).offset == 1
     assert transcript.intron_c_position(intron, midpoint).offset == midpoint
-    assert transcript.intron_c_position(intron, midpoint + 1).offset == -(
-        intron.length - midpoint
-    )
+    assert transcript.intron_c_position(intron, midpoint + 1).offset == -(intron.length - midpoint)
     assert transcript.intron_c_position(intron, intron.length).offset == -1
 
     offsets = [transcript.intron_c_position(intron, n).offset for n in range(1, intron.length + 1)]

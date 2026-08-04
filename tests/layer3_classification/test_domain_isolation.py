@@ -76,9 +76,7 @@ def test_engine_code_contains_no_domain_constant(path: Path):
     )
 
 
-def test_the_whole_pipeline_runs_on_a_gene_that_does_not_exist(
-    minus_gene, minus_config, toy_spec
-):
+def test_the_whole_pipeline_runs_on_a_gene_that_does_not_exist(minus_gene, minus_config, toy_spec):
     """The executable form of the isolation guarantee."""
     from datetime import datetime
 

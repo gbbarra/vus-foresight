@@ -189,9 +189,7 @@ def build_frameshift_classes(transcript: Transcript) -> FrameshiftEnumeration:
     for indel in enumerate_minimal_indels(transcript):
         if indel.net_shift % 3 == 0:
             continue
-        ptc = ptc_after_indel(
-            stop_index, indel.cds_position, indel.deleted, indel.inserted
-        )
+        ptc = ptc_after_indel(stop_index, indel.cds_position, indel.deleted, indel.inserted)
         if ptc is None or ptc > transcript.protein_length:
             # A terminator at or beyond the normal stop is not premature.
             continue
@@ -204,16 +202,16 @@ def build_frameshift_classes(transcript: Transcript) -> FrameshiftEnumeration:
     return FrameshiftEnumeration(classes=classes, unreachable=unreachable)
 
 
-def _frameshift_protein_hgvs(
-    transcript: Transcript, indel: MinimalIndel, ptc_codon: int
-) -> str:
+def _frameshift_protein_hgvs(transcript: Transcript, indel: MinimalIndel, ptc_codon: int) -> str:
     """Derive ``p.Arg100SerfsTer12`` by translating the mutant, not by rule."""
     cds = coding_and_utr3(transcript)
     window = 3 * ptc_codon
     mutant = (
         cds[: indel.cds_position - 1]
         + indel.inserted
-        + cds[indel.cds_position - 1 + indel.deleted : indel.cds_position - 1 + indel.deleted + window]
+        + cds[
+            indel.cds_position - 1 + indel.deleted : indel.cds_position - 1 + indel.deleted + window
+        ]
     )
     ref_protein = translate(cds[: window + 3])
     alt_protein = translate(mutant[:window])
@@ -260,9 +258,7 @@ def enumerate_frameshift_classes(transcript: Transcript) -> Iterator[Variant]:
         )
 
 
-def verify_class_membership(
-    transcript: Transcript, indel: MinimalIndel, ptc_codon: int
-) -> bool:
+def verify_class_membership(transcript: Transcript, indel: MinimalIndel, ptc_codon: int) -> bool:
     """Independently confirm an indel produces a PTC at ``ptc_codon``.
 
     Rebuilds the mutant sequence and translates it from scratch -- no

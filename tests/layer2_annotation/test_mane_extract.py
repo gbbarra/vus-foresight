@@ -59,8 +59,10 @@ def _write_release(tmp_path, gene, config, *, gzipped=False, accession_seqname=F
     suffix = ".gz" if gzipped else ""
     gtf_path = tmp_path / f"mane.gtf{suffix}"
     fasta_path = tmp_path / f"mane.fna{suffix}"
-    opener = (lambda p: gzip.open(p, "wt", encoding="utf-8")) if gzipped else (
-        lambda p: p.open("w", encoding="utf-8")
+    opener = (
+        (lambda p: gzip.open(p, "wt", encoding="utf-8"))
+        if gzipped
+        else (lambda p: p.open("w", encoding="utf-8"))
     )
     with opener(gtf_path) as handle:
         handle.writelines(gtf_lines)
@@ -107,9 +109,7 @@ def test_clinical_exon_labels_win_over_gtf_exon_number(tmp_path, minus_gene, min
     assert any("clinical exon labels differ" in w for w in extract.warnings)
 
 
-def test_gzipped_and_accession_keyed_releases_are_accepted(
-    tmp_path, minus_gene, minus_config
-):
+def test_gzipped_and_accession_keyed_releases_are_accepted(tmp_path, minus_gene, minus_config):
     gtf, fasta = _write_release(
         tmp_path, minus_gene, minus_config, gzipped=True, accession_seqname=False
     )
@@ -124,9 +124,7 @@ def test_chromosome_spellings_are_reconciled():
     assert normalise_chrom("NC_000023.11") == "chrX"
 
 
-def test_a_gtf_and_fasta_from_different_releases_is_an_error(
-    tmp_path, minus_gene, minus_config
-):
+def test_a_gtf_and_fasta_from_different_releases_is_an_error(tmp_path, minus_gene, minus_config):
     """Individually plausible, jointly wrong -- and it shifts every coordinate."""
     gtf, fasta = _write_release(tmp_path, minus_gene, minus_config)
     truncated = tmp_path / "short.fna"
@@ -157,11 +155,7 @@ def test_a_missing_transcript_names_the_version_as_the_likely_cause(
 ):
     gtf, fasta = _write_release(tmp_path, minus_gene, minus_config)
     wrong_version = minus_config.model_copy(
-        update={
-            "transcript": minus_config.transcript.model_copy(
-                update={"id": "NM_999002.9"}
-            )
-        }
+        update={"transcript": minus_config.transcript.model_copy(update={"id": "NM_999002.9"})}
     )
     with pytest.raises(ReferenceUnavailable, match="no exon features"):
         extract_transcript(wrong_version, gtf_path=gtf, fasta_path=fasta)
@@ -180,9 +174,7 @@ def test_an_exon_count_disagreement_is_an_error(tmp_path, minus_gene, minus_conf
         extract_transcript(wrong, gtf_path=gtf, fasta_path=fasta)
 
 
-def test_extract_then_import_produces_a_working_transcript(
-    tmp_path, minus_gene, minus_config
-):
+def test_extract_then_import_produces_a_working_transcript(tmp_path, minus_gene, minus_config):
     """The whole acquisition path, end to end, with an exact oracle."""
     import yaml
 

@@ -72,13 +72,10 @@ def test_a_populated_source_reports_high_coverage(tmp_path, minus_gene):
     sample = _sample(minus_gene)
     path = tmp_path / "frequency.tsv"
     path.write_text(
-        "grch38_pos\tgnomad.faf95_popmax\n"
-        + "".join(f"{v.grch38_pos}\t0.0\n" for v in sample),
+        "grch38_pos\tgnomad.faf95_popmax\n" + "".join(f"{v.grch38_pos}\t0.0\n" for v in sample),
         encoding="utf-8",
     )
-    statuses = check_sources(
-        [FrequencyAdapter(path, "test")], minus_gene.transcript, sample
-    )
+    statuses = check_sources([FrequencyAdapter(path, "test")], minus_gene.transcript, sample)
     assert statuses[0].coverage == 1.0
     assert statuses[0].symbol == "ok"
     assert statuses[0].records == len(sample)
@@ -98,9 +95,7 @@ def test_a_slice_with_the_wrong_coordinates_is_loud_not_silent(tmp_path, minus_g
         + "".join(f"chr99-{9_000_000 + i}-A-G\t0.0\n" for i in range(2000)),
         encoding="utf-8",
     )
-    statuses = check_sources(
-        [FrequencyAdapter(path, "test")], minus_gene.transcript, sample
-    )
+    statuses = check_sources([FrequencyAdapter(path, "test")], minus_gene.transcript, sample)
     assert statuses[0].present
     assert statuses[0].records == 2000
     assert statuses[0].coverage == 0.0
@@ -115,20 +110,15 @@ def test_partial_coverage_is_flagged_as_neither_fine_nor_broken(tmp_path, minus_
     sample = _sample(minus_gene, size=40)
     path = tmp_path / "partial.tsv"
     path.write_text(
-        "grch38_pos\tbayesdel\n"
-        + "".join(f"{v.grch38_pos}\t0.4\n" for v in sample[:8]),
+        "grch38_pos\tbayesdel\n" + "".join(f"{v.grch38_pos}\t0.4\n" for v in sample[:8]),
         encoding="utf-8",
     )
-    statuses = check_sources(
-        [PredictorAdapter(path, "test")], minus_gene.transcript, sample
-    )
+    statuses = check_sources([PredictorAdapter(path, "test")], minus_gene.transcript, sample)
     assert statuses[0].coverage == pytest.approx(0.2)
     assert statuses[0].symbol == " ~"
 
 
-def test_a_default_payload_counts_as_coverage_because_it_is_an_assertion(
-    tmp_path, minus_gene
-):
+def test_a_default_payload_counts_as_coverage_because_it_is_an_assertion(tmp_path, minus_gene):
     """gnomAD not listing a variant is a positive statement, not a gap.
 
     An adapter carrying a default payload answers for every variant, and that is
@@ -138,17 +128,11 @@ def test_a_default_payload_counts_as_coverage_because_it_is_an_assertion(
     path = tmp_path / "empty.tsv"
     path.write_text("grch38_pos\tgnomad.faf95_popmax\n", encoding="utf-8")
 
-    without = check_sources(
-        [FrequencyAdapter(path, "test")], minus_gene.transcript, sample
-    )
+    without = check_sources([FrequencyAdapter(path, "test")], minus_gene.transcript, sample)
     assert without[0].coverage == 0.0
 
     with_default = check_sources(
-        [
-            FrequencyAdapter(
-                path, "test", default_payload={"gnomad": {"faf95_popmax": 0.0}}
-            )
-        ],
+        [FrequencyAdapter(path, "test", default_payload={"gnomad": {"faf95_popmax": 0.0}})],
         minus_gene.transcript,
         sample,
     )

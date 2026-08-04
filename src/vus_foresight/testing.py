@@ -118,9 +118,7 @@ def build_synthetic_gene(
 
     tx_seq = _build_transcript_sequence(seed, protein_length)
     if len(tx_seq) != sum(exon_lengths):
-        raise ValueError(
-            f"toy transcript length {len(tx_seq)} != exon total {sum(exon_lengths)}"
-        )
+        raise ValueError(f"toy transcript length {len(tx_seq)} != exon total {sum(exon_lengths)}")
 
     span = sum(exon_lengths) + sum(intron_lengths)
     if strand == "+":
@@ -135,8 +133,7 @@ def build_synthetic_gene(
 
     intervals = _exon_intervals(strand, anchor, exon_lengths, intron_lengths)
     exons = tuple(
-        Exon(label=label, start=start, end=end)
-        for label, (start, end) in zip(labels, intervals)
+        Exon(label=label, start=start, end=end) for label, (start, end) in zip(labels, intervals)
     )
 
     cursor = 0
@@ -204,9 +201,7 @@ def synthetic_gene_config(
             FunctionalRegion(
                 name="toy critical domain", start_aa=5, end_aa=12, tags=("critical", "domain")
             ),
-            FunctionalRegion(
-                name="toy repeat region", start_aa=25, end_aa=32, tags=("repeat",)
-            ),
+            FunctionalRegion(name="toy repeat region", start_aa=25, end_aa=32, tags=("repeat",)),
         ),
     )
 
@@ -269,9 +264,7 @@ def build_demo_runner(
 def demo_adapters(synthetic: SyntheticGene, tmp_path: Path) -> list:
     """File-backed adapters over tiny snapshots, for tests that need evidence."""
     frequency = tmp_path / "frequency.tsv"
-    frequency.write_text(
-        "grch38_pos\tgnomad.faf95_popmax\tabraom.af\n", encoding="utf-8"
-    )
+    frequency.write_text("grch38_pos\tgnomad.faf95_popmax\tabraom.af\n", encoding="utf-8")
     predictor = tmp_path / "predictor.tsv"
     predictor.write_text("grch38_pos\tbayesdel\n", encoding="utf-8")
     splice = tmp_path / "splice.tsv"
@@ -279,9 +272,7 @@ def demo_adapters(synthetic: SyntheticGene, tmp_path: Path) -> list:
     functional = tmp_path / "functional.tsv"
     functional.write_text("hgvs_p\tclassification\tscore\tdataset\n", encoding="utf-8")
     return [
-        FrequencyAdapter(
-            frequency, "test", default_payload={"gnomad": {"faf95_popmax": 0.0}}
-        ),
+        FrequencyAdapter(frequency, "test", default_payload={"gnomad": {"faf95_popmax": 0.0}}),
         PredictorAdapter(predictor, "test"),
         SpliceAdapter(splice, "test"),
         FunctionalAdapter(functional, "test"),

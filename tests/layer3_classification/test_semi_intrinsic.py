@@ -40,7 +40,8 @@ from vus_foresight.variant import Consequence
 @pytest.fixture()
 def missense(minus_gene):
     return next(
-        v for v in enumerate_coding_snvs(minus_gene.transcript)
+        v
+        for v in enumerate_coding_snvs(minus_gene.transcript)
         if v.consequence is Consequence.MISSENSE and v.codon_index and v.codon_index > 3
     )
 
@@ -176,16 +177,10 @@ def test_the_adapter_reaches_the_criteria_end_to_end(
 
     path = tmp_path / "clinvar.tsv"
     write_snapshot(
-        [
-            ClinVarRecord(
-                "c.999999A>G", missense.hgvs_p, "pathogenic", 3, missense.codon_index
-            )
-        ],
+        [ClinVarRecord("c.999999A>G", missense.hgvs_p, "pathogenic", 3, missense.codon_index)],
         path,
     )
-    registry = AdapterRegistry(
-        [VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)]
-    )
+    registry = AdapterRegistry([VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)])
     registry.add(ClinVarSnapshotAdapter.from_path(path, snapshot_date=date(2020, 1, 1)))
     runner = MapRunner(
         transcript=minus_gene.transcript,
@@ -221,9 +216,7 @@ def test_variant_summary_parser_keeps_only_the_named_transcript(tmp_path):
     source = tmp_path / "variant_summary.txt"
     source.write_text(VARIANT_SUMMARY, encoding="utf-8")
     stats = ParseStats()
-    records = list(
-        parse_variant_summary(source, transcript="NM_007294.4", stats=stats)
-    )
+    records = list(parse_variant_summary(source, transcript="NM_007294.4", stats=stats))
 
     kept = {r.hgvs_c for r in records}
     assert kept == {"c.5074G>A", "c.5075A>G", "c.5076C>T"}

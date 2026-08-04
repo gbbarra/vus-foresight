@@ -129,8 +129,7 @@ class TranscriptConfig(BaseModel):
             )
         if self.exon_labels and len(self.exon_labels) != self.exon_count:
             raise ValueError(
-                f"{self.id}: {len(self.exon_labels)} exon labels for "
-                f"exon_count {self.exon_count}"
+                f"{self.id}: {len(self.exon_labels)} exon labels for exon_count {self.exon_count}"
             )
         if self.exons and len(self.exons) != self.exon_count:
             raise ValueError(

@@ -48,9 +48,7 @@ def missense_variants(minus_gene):
 
 
 def _map(minus_gene, minus_config, toy_spec, variants, *, adapters=()):
-    registry = AdapterRegistry(
-        [VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)]
-    )
+    registry = AdapterRegistry([VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)])
     for adapter in adapters:
         registry.add(adapter)
     runner = MapRunner(
@@ -144,17 +142,22 @@ def test_observed_cause_comes_from_the_specs_own_blocks_as(
     empty.write_text("hgvs_p\tclassification\tscore\tdataset\n", encoding="utf-8")
     assayed = tmp_path / "func.tsv"
     assayed.write_text(
-        "hgvs_p\tclassification\tscore\tdataset\n"
-        f"{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
+        f"hgvs_p\tclassification\tscore\tdataset\n{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
         encoding="utf-8",
     )
 
     before = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(empty, "t0", assayed_regions=((1, 40, "TOY-SGE"),))],
     )
     after = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(assayed, "t1", assayed_regions=((1, 40, "TOY-SGE"),))],
     )
 
@@ -188,10 +191,7 @@ def test_the_study_runs_with_no_external_outcome_table(
     # ClinVar's own call: uncertain at T, pathogenic at T+n. No criterion reads
     # this, so it is a clean oracle for what the field concluded.
     cv_before = ClinVarSnapshot.from_records(
-        [
-            ClinVarRecord(v.hgvs_c, v.hgvs_p, "uncertain", 2, v.codon_index)
-            for v in variants
-        ],
+        [ClinVarRecord(v.hgvs_c, v.hgvs_p, "uncertain", 2, v.codon_index) for v in variants],
         date(2018, 1, 1),
     )
     cv_after = ClinVarSnapshot.from_records(
@@ -214,17 +214,22 @@ def test_the_study_runs_with_no_external_outcome_table(
     empty.write_text("hgvs_p\tclassification\tscore\tdataset\n", encoding="utf-8")
     assayed = tmp_path / "func.tsv"
     assayed.write_text(
-        "hgvs_p\tclassification\tscore\tdataset\n"
-        f"{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
+        f"hgvs_p\tclassification\tscore\tdataset\n{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
         encoding="utf-8",
     )
     regions = ((1, 40, "TOY-SGE"),)
     rows_t = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(empty, "t0", assayed_regions=regions)],
     )
     rows_tn = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(assayed, "t1", assayed_regions=regions)],
     )
 
@@ -272,11 +277,12 @@ def test_direction_is_scored_when_the_map_had_a_lean(
     transcript = minus_gene.transcript.transcript_id
 
     predictor = tmp_path / "pred.tsv"
-    predictor.write_text(
-        f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8"
-    )
+    predictor.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8")
     rows = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[PredictorAdapter(predictor, "t")],
     )
     leaning = next(r for r in rows if r.hgvs_c == target.hgvs_c)
@@ -421,11 +427,17 @@ def test_a_neighbour_driven_resolution_gets_its_own_observed_label(
         later,
     )
     before = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[ClinVarSnapshotAdapter.from_path(empty)],
     )
     after = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[ClinVarSnapshotAdapter.from_path(later)],
     )
     causes = observed_causes_from_diff(compare_maps(before, after), toy_spec)
@@ -445,15 +457,19 @@ def test_variants_the_map_moved_ahead_of_the_archive_are_surfaced(
     empty = tmp_path / "pred_empty.tsv"
     empty.write_text("grch38_pos\tbayesdel\n", encoding="utf-8")
     scored = tmp_path / "pred.tsv"
-    scored.write_text(
-        f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8"
-    )
+    scored.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8")
     rows_t = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[PredictorAdapter(empty, "t0")],
     )
     rows_tn = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[PredictorAdapter(scored, "t1")],
     )
     # ClinVar has moved nobody.
@@ -553,17 +569,22 @@ def test_the_study_is_identical_whether_the_maps_are_streamed_or_materialised(
     empty.write_text("hgvs_p\tclassification\tscore\tdataset\n", encoding="utf-8")
     assayed = tmp_path / "func.tsv"
     assayed.write_text(
-        "hgvs_p\tclassification\tscore\tdataset\n"
-        f"{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
+        f"hgvs_p\tclassification\tscore\tdataset\n{target.hgvs_p}\tabnormal\t-2.1\tTOY-SGE\n",
         encoding="utf-8",
     )
     regions = ((1, 40, "TOY-SGE"),)
     rows_t = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(empty, "t0", assayed_regions=regions)],
     )
     rows_tn = _map(
-        minus_gene, minus_config, toy_spec, variants,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
         adapters=[FunctionalAdapter(assayed, "t1", assayed_regions=regions)],
     )
     path_t, path_tn = tmp_path / "t.parquet", tmp_path / "tn.parquet"
@@ -598,6 +619,4 @@ def test_a_generator_of_rows_is_refused_by_the_study(
     rows = _map(minus_gene, minus_config, toy_spec, missense_variants[:5])
     empty = ClinVarSnapshot.from_records([], date(2018, 1, 1))
     with pytest.raises(TypeError, match="one-shot iterator"):
-        run_time_series_study(
-            iter(rows), rows, empty, empty, toy_spec, transcript_id="NM_1.1"
-        )
+        run_time_series_study(iter(rows), rows, empty, empty, toy_spec, transcript_id="NM_1.1")

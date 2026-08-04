@@ -83,9 +83,7 @@ def _fully_evidenced_adapters(tmp_path, gene, variants):
     predictor = tmp_path / "predictor.tsv"
     predictor.write_text(
         "grch38_pos\tbayesdel\n"
-        + "".join(
-            f"{v.grch38_pos}\t{0.62 if i % 2 else 0.05}\n" for i, v in enumerate(coding)
-        ),
+        + "".join(f"{v.grch38_pos}\t{0.62 if i % 2 else 0.05}\n" for i, v in enumerate(coding)),
         encoding="utf-8",
     )
     splice = tmp_path / "splice.tsv"
@@ -142,7 +140,9 @@ def test_reuse_produces_exactly_the_reference_rows(both_strands, strand, toy_spe
     ).synthetic_gene_config(gene)
     variants = _variants(gene)
 
-    reference = [r.row for r in _runner(gene, config, toy_spec, reuse_by_signature=False).run(variants)]
+    reference = [
+        r.row for r in _runner(gene, config, toy_spec, reuse_by_signature=False).run(variants)
+    ]
     cached_runner = _runner(gene, config, toy_spec, reuse_by_signature=True)
     cached = [r.row for r in cached_runner.run(variants)]
 
@@ -192,9 +192,7 @@ def test_the_footprint_is_not_padded_with_paths_nobody_reads(
     from vus_foresight.adapters.builtin import RegionAdapter, TranscriptAdapter, VariantAdapter
 
     variants = _variants(minus_gene)
-    registry = AdapterRegistry(
-        [VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)]
-    )
+    registry = AdapterRegistry([VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)])
     for adapter in _fully_evidenced_adapters(tmp_path, minus_gene, variants):
         registry.add(adapter)
 
@@ -257,9 +255,7 @@ def test_reuse_matches_the_reference_with_every_source_populated(
     assert cached_runner.cache.size > 1, "the evidence should not be uniform here"
 
 
-def test_changing_any_footprint_path_changes_the_signature(
-    minus_gene, minus_config, toy_spec
-):
+def test_changing_any_footprint_path_changes_the_signature(minus_gene, minus_config, toy_spec):
     runner = _runner(minus_gene, minus_config, toy_spec)
     variant = next(v for v in _variants(minus_gene) if v.consequence is Consequence.MISSENSE)
     context = runner.build_context(variant)
@@ -297,9 +293,7 @@ def test_consequence_terms_are_part_of_the_signature(minus_gene, minus_config, t
     ) != evidence_signature(synonymous, runner.build_context(synonymous), footprint)
 
 
-def test_missense_shares_computation_but_never_shares_a_class(
-    minus_gene, minus_config, toy_spec
-):
+def test_missense_shares_computation_but_never_shares_a_class(minus_gene, minus_config, toy_spec):
     """Section 5 forbids collapsing missense in the report, not in the arithmetic.
 
     With no predictor or assay loaded, every missense variant has the same
@@ -325,9 +319,7 @@ def test_truncating_variants_are_not_over_merged(minus_gene, minus_config, toy_s
     rows = [r.row for r in runner.run(_variants(minus_gene))]
     nonsense = [row for row in rows if row.consequence is Consequence.NONSENSE]
     assert nonsense
-    evidence = {
-        c.evidence for row in nonsense for c in row.criteria_applied if c.code == "PVS1"
-    }
+    evidence = {c.evidence for row in nonsense for c in row.criteria_applied if c.code == "PVS1"}
     assert len(evidence) > 1, "distinct PTC positions collapsed into one evidence string"
 
 

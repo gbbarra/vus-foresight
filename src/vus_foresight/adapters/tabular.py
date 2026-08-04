@@ -219,9 +219,7 @@ class FunctionalAdapter(TableAdapter):
             payload.setdefault("region_assayed", False)
             return payload
         covering = [
-            dataset
-            for first, last, dataset in self.assayed_regions
-            if first <= residue <= last
+            dataset for first, last, dataset in self.assayed_regions if first <= residue <= last
         ]
         payload["region_assayed"] = bool(covering)
         if covering:

@@ -44,13 +44,9 @@ def _map(
     predictor_path=None,
     snapshot_date=None,
 ):
-    registry = AdapterRegistry(
-        [VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)]
-    )
+    registry = AdapterRegistry([VariantAdapter(), TranscriptAdapter(), RegionAdapter(minus_config)])
     if clinvar_path is not None:
-        registry.add(
-            ClinVarSnapshotAdapter.from_path(clinvar_path, snapshot_date=snapshot_date)
-        )
+        registry.add(ClinVarSnapshotAdapter.from_path(clinvar_path, snapshot_date=snapshot_date))
     if predictor_path is not None:
         registry.add(PredictorAdapter(predictor_path, "dbnsfp-test"))
     runner = MapRunner(
@@ -78,20 +74,26 @@ def test_a_neighbour_classification_moves_a_variant_with_no_evidence_about_itsel
     write_snapshot(
         [
             # A different nucleotide change reaching the same protein change.
-            ClinVarRecord(
-                "c.999999A>G", target.hgvs_p, "pathogenic", 3, target.codon_index
-            )
+            ClinVarRecord("c.999999A>G", target.hgvs_p, "pathogenic", 3, target.codon_index)
         ],
         later,
     )
 
     before = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=empty, snapshot_date=date(2018, 1, 1),
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=empty,
+        snapshot_date=date(2018, 1, 1),
     )
     after = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=later, snapshot_date=date(2024, 1, 1),
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=later,
+        snapshot_date=date(2024, 1, 1),
     )
 
     diff = compare_maps(before, after, label_before="2018-01-01", label_after="2024-01-01")
@@ -107,9 +109,7 @@ def test_a_neighbour_classification_moves_a_variant_with_no_evidence_about_itsel
     # One classification does not move one variant -- it moves the whole codon.
     # The variants reaching the same protein change gain PS1; the rest of the
     # codon gains PM5. Not one of them had any evidence generated about itself.
-    by_codon = {
-        v.variant_id: v.codon_index for v in variants if v.codon_index is not None
-    }
+    by_codon = {v.variant_id: v.codon_index for v in variants if v.codon_index is not None}
     assert {by_codon[t.variant_id] for t in diff.transitions} == {target.codon_index}
     assert all(t.cause is TransitionCause.NEIGHBOUR_EVIDENCE for t in diff.transitions)
     gained = {t.variant_id: {code for code, _ in t.criteria_gained} for t in diff.transitions}
@@ -132,9 +132,7 @@ def test_new_intrinsic_data_is_attributed_differently(
     empty_predictor = tmp_path / "pred_empty.tsv"
     empty_predictor.write_text("grch38_pos\tbayesdel\n", encoding="utf-8")
     scored = tmp_path / "pred_scored.tsv"
-    scored.write_text(
-        f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8"
-    )
+    scored.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8")
 
     before = _map(minus_gene, minus_config, toy_spec, variants, predictor_path=empty_predictor)
     after = _map(minus_gene, minus_config, toy_spec, variants, predictor_path=scored)
@@ -165,12 +163,20 @@ def test_both_kinds_moving_in_one_interval_is_reported_as_mixed(
     scored.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8")
 
     before = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=empty_cv, predictor_path=empty_pred,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=empty_cv,
+        predictor_path=empty_pred,
     )
     after = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=later_cv, predictor_path=scored,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=later_cv,
+        predictor_path=scored,
     )
 
     transition = next(
@@ -189,9 +195,7 @@ def test_resolution_without_self_evidence_is_singled_out(
 
     # Start with enough intrinsic weight that one strong criterion tips it over.
     predictor = tmp_path / "pred.tsv"
-    predictor.write_text(
-        f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8"
-    )
+    predictor.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.62\n", encoding="utf-8")
     empty_cv = tmp_path / "cv_empty.tsv"
     write_snapshot([], empty_cv)
     later_cv = tmp_path / "cv_later.tsv"
@@ -201,12 +205,20 @@ def test_resolution_without_self_evidence_is_singled_out(
     )
 
     before = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=empty_cv, predictor_path=predictor,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=empty_cv,
+        predictor_path=predictor,
     )
     after = _map(
-        minus_gene, minus_config, toy_spec, variants,
-        clinvar_path=later_cv, predictor_path=predictor,
+        minus_gene,
+        minus_config,
+        toy_spec,
+        variants,
+        clinvar_path=later_cv,
+        predictor_path=predictor,
     )
 
     diff = compare_maps(before, after)
@@ -270,8 +282,12 @@ def test_a_series_is_diffed_consecutively(
             (
                 f"T{index}",
                 _map(
-                    minus_gene, minus_config, toy_spec, variants,
-                    clinvar_path=path, snapshot_date=date(2018 + index, 1, 1),
+                    minus_gene,
+                    minus_config,
+                    toy_spec,
+                    variants,
+                    clinvar_path=path,
+                    snapshot_date=date(2018 + index, 1, 1),
                 ),
             )
         )
@@ -283,9 +299,7 @@ def test_a_series_is_diffed_consecutively(
     assert {codon_of[t.variant_id] for t in diffs[0].transitions} == {first.codon_index}
     assert {codon_of[t.variant_id] for t in diffs[1].transitions} == {second.codon_index}
     assert all(
-        t.cause is TransitionCause.NEIGHBOUR_EVIDENCE
-        for diff in diffs
-        for t in diff.transitions
+        t.cause is TransitionCause.NEIGHBOUR_EVIDENCE for diff in diffs for t in diff.transitions
     )
 
 
@@ -332,12 +346,8 @@ def test_transitions_survive_a_parquet_round_trip(
 
     assert round_tripped.transitions == in_memory.transitions
     assert round_tripped.transitions
-    assert all(
-        t.cause is TransitionCause.NEIGHBOUR_EVIDENCE for t in round_tripped.transitions
-    )
-    assert any(
-        t.criteria_gained == (("PS1", "strong"),) for t in round_tripped.transitions
-    )
+    assert all(t.cause is TransitionCause.NEIGHBOUR_EVIDENCE for t in round_tripped.transitions)
+    assert any(t.criteria_gained == (("PS1", "strong"),) for t in round_tripped.transitions)
 
 
 def test_streaming_a_map_from_disk_gives_the_identical_diff(
@@ -361,8 +371,12 @@ def test_streaming_a_map_from_disk_gives_the_identical_diff(
         later,
     )
     before_path, after_path = tmp_path / "b.parquet", tmp_path / "a.parquet"
-    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path)
-    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later), after_path)
+    write_parquet(
+        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path
+    )
+    write_parquet(
+        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later), after_path
+    )
 
     materialised = compare_maps(read_rows(before_path), read_rows(after_path))
     # A batch size below the row count forces several Parquet batches, so the
@@ -393,7 +407,9 @@ def test_transitions_come_out_in_enumeration_order(
         later,
     )
     before_path, after_path = tmp_path / "b.parquet", tmp_path / "a.parquet"
-    write_parquet(_map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path)
+    write_parquet(
+        _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=empty), before_path
+    )
     after_rows = _map(minus_gene, minus_config, toy_spec, variants, clinvar_path=later)
     write_parquet(after_rows, after_path)
 

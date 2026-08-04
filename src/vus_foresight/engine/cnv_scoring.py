@@ -90,9 +90,7 @@ class CNVScore:
         return self.score / SCALE
 
 
-def score_cnv(
-    variant: Variant, gene: GeneConfig, config: CNVScoringConfig
-) -> CNVScore:
+def score_cnv(variant: Variant, gene: GeneConfig, config: CNVScoringConfig) -> CNVScore:
     """Score one exon-level deletion or duplication."""
     if variant.kind is not VariantKind.CNV:
         raise ValueError(f"{variant.variant_id} is not a copy number variant")
@@ -108,8 +106,7 @@ def score_cnv(
                 return CNVScore(
                     config.loss_full_gene_established,
                     "2A",
-                    f"complete deletion of {gene.gene}, an established "
-                    "haploinsufficient gene",
+                    f"complete deletion of {gene.gene}, an established haploinsufficient gene",
                 )
             return CNVScore(
                 config.loss_full_gene_unestablished,
@@ -121,14 +118,12 @@ def score_cnv(
             return CNVScore(
                 config.loss_intragenic_in_frame,
                 "2E",
-                f"intragenic deletion of {exon_count} exon(s) preserving the "
-                "reading frame",
+                f"intragenic deletion of {exon_count} exon(s) preserving the reading frame",
             )
         return CNVScore(
             config.loss_intragenic_frame_disrupting,
             "2E",
-            f"intragenic deletion of {exon_count} exon(s) disrupting the "
-            "reading frame",
+            f"intragenic deletion of {exon_count} exon(s) disrupting the reading frame",
         )
 
     if whole_gene:
@@ -179,11 +174,15 @@ def cnv_row(
             source=config.version_string,
         ),
     )
-    gap_lp = None if scored.score >= config.threshold_likely_pathogenic else (
-        config.threshold_likely_pathogenic - scored.score
+    gap_lp = (
+        None
+        if scored.score >= config.threshold_likely_pathogenic
+        else (config.threshold_likely_pathogenic - scored.score)
     )
-    gap_lb = None if scored.score <= config.threshold_likely_benign else (
-        scored.score - config.threshold_likely_benign
+    gap_lb = (
+        None
+        if scored.score <= config.threshold_likely_benign
+        else (scored.score - config.threshold_likely_benign)
     )
     return GapMapRow(
         gene=variant.gene,

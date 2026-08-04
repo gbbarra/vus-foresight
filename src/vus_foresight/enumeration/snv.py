@@ -44,9 +44,7 @@ def enumerate_coding_snvs(transcript: Transcript) -> Iterator[Variant]:
             )
 
 
-def intronic_snv_positions(
-    transcript: Transcript, *, flank_bp: int = 50
-) -> list[tuple[int, int]]:
+def intronic_snv_positions(transcript: Transcript, *, flank_bp: int = 50) -> list[tuple[int, int]]:
     """``(intron_index, offset_from_donor)`` for every enumerated intronic base.
 
     Both sides of every junction are covered: offsets ``1..flank_bp`` from the

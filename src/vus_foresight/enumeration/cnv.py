@@ -69,8 +69,6 @@ def enumerate_exon_cnvs(transcript: Transcript) -> Iterator[Variant]:
                         "exon_count": str(last - first + 1),
                         "coding_nt": str(coding_nt),
                         "in_frame": str(coding_nt % 3 == 0).lower(),
-                        "spans_whole_gene": str(
-                            first == 0 and last == len(exons) - 1
-                        ).lower(),
+                        "spans_whole_gene": str(first == 0 and last == len(exons) - 1).lower(),
                     },
                 )

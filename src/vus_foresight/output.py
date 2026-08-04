@@ -380,9 +380,7 @@ def read_rows(path: str | Path) -> list[GapMapRow]:
     return rows_from_frame(read_parquet(path))
 
 
-def iter_rows(
-    path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE
-) -> Iterator[GapMapRow]:
+def iter_rows(path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE) -> Iterator[GapMapRow]:
     """Stream a gap map partition, holding one batch of rows at a time."""
     import pyarrow.parquet as pq
 

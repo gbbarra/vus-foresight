@@ -54,9 +54,7 @@ def _annotate_substitution(transcript, hgvs_c: str):
             f"{hgvs_c}: oracle says the reference base is {ref}, the transcript has "
             f"{transcript.cds[position - 1]}. This is a coordinate or reference error."
         )
-    return annotate_coding_edits(
-        transcript, (CodingEdit(cds_position=position, ref=ref, alt=alt),)
-    )
+    return annotate_coding_edits(transcript, (CodingEdit(cds_position=position, ref=ref, alt=alt),))
 
 
 @pytest.mark.requires_reference
@@ -110,8 +108,7 @@ def test_divergence_against_a_reference_validator_is_diagnosed(brca1, brca2):
     assert compared > 0
     rate = len(protein_mismatches) / compared
     diagnosis = (
-        "SYSTEMATIC -- suspect an HGVS convention (parentheses, Ter vs *, "
-        "frameshift numbering)"
+        "SYSTEMATIC -- suspect an HGVS convention (parentheses, Ter vs *, frameshift numbering)"
         if rate > 0.2
         else "SPARSE -- suspect individual coordinate errors"
     )

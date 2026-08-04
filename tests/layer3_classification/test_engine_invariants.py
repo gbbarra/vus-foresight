@@ -136,9 +136,7 @@ def test_extrinsic_criteria_are_never_applied(minus_gene, minus_config, toy_spec
             if s.evidence_class is EvidenceClass.EXTRINSIC
         ]
         assert extrinsic
-        assert all(
-            s.reason is SkipReason.EXTRINSIC_EVIDENCE_REQUIRED for s in extrinsic
-        )
+        assert all(s.reason is SkipReason.EXTRINSIC_EVIDENCE_REQUIRED for s in extrinsic)
 
 
 def test_missing_data_is_never_reported_as_rule_not_met(minus_gene, minus_config, toy_spec):
@@ -155,22 +153,14 @@ def test_missing_data_is_never_reported_as_rule_not_met(minus_gene, minus_config
 
 def test_points_equal_the_sum_of_applied_criteria(minus_gene, minus_config, toy_spec):
     for result in _run(minus_gene, minus_config, toy_spec):
-        assert result.row.points_current == sum(
-            c.points for c in result.row.criteria_applied
-        )
-        assert result.row.class_current is toy_spec.point_system.classify(
-            result.row.points_current
-        )
+        assert result.row.points_current == sum(c.points for c in result.row.criteria_applied)
+        assert result.row.class_current is toy_spec.point_system.classify(result.row.points_current)
 
 
-def test_mutually_exclusive_criteria_never_apply_together(
-    minus_gene, minus_config, toy_spec
-):
+def test_mutually_exclusive_criteria_never_apply_together(minus_gene, minus_config, toy_spec):
     groups = {c.code: c.mutex_group for c in toy_spec.criteria if c.mutex_group}
     for result in _run(minus_gene, minus_config, toy_spec):
-        applied_groups = [
-            groups[c.code] for c in result.row.criteria_applied if c.code in groups
-        ]
+        applied_groups = [groups[c.code] for c in result.row.criteria_applied if c.code in groups]
         assert len(applied_groups) == len(set(applied_groups))
 
 
@@ -184,26 +174,24 @@ def test_ceiling_is_never_below_the_current_score(minus_gene, minus_config, toy_
         assert result.row.points_ceiling_intrinsic >= result.row.points_current
 
 
-def test_minimum_sufficient_sets_actually_close_the_gap(
-    minus_gene, minus_config, toy_spec
-):
+def test_minimum_sufficient_sets_actually_close_the_gap(minus_gene, minus_config, toy_spec):
     for result in _run(minus_gene, minus_config, toy_spec):
         row = result.row
         for evidence_set in row.minimum_sufficient_sets:
             total = sum(abs(r.points) for r in evidence_set.requirements)
-            gap = row.gap_to_LP if evidence_set.target is ACMGClass.LIKELY_PATHOGENIC else row.gap_to_LB
+            gap = (
+                row.gap_to_LP
+                if evidence_set.target is ACMGClass.LIKELY_PATHOGENIC
+                else row.gap_to_LB
+            )
             assert gap is not None
             assert total >= gap, f"{evidence_set.codes} sums to {total}, gap is {gap}"
 
 
-def test_minimum_sufficient_sets_are_minimal_by_inclusion(
-    minus_gene, minus_config, toy_spec
-):
+def test_minimum_sufficient_sets_are_minimal_by_inclusion(minus_gene, minus_config, toy_spec):
     for result in _run(minus_gene, minus_config, toy_spec):
         for target in (ACMGClass.LIKELY_PATHOGENIC, ACMGClass.LIKELY_BENIGN):
-            sets = [
-                s for s in result.row.minimum_sufficient_sets if s.target is target
-            ]
+            sets = [s for s in result.row.minimum_sufficient_sets if s.target is target]
             for i, first in enumerate(sets):
                 for j, second in enumerate(sets):
                     if i == j:
@@ -213,9 +201,7 @@ def test_minimum_sufficient_sets_are_minimal_by_inclusion(
                     )
 
 
-def test_intractable_evidence_is_excluded_from_proposed_sets(
-    minus_gene, minus_config, toy_spec
-):
+def test_intractable_evidence_is_excluded_from_proposed_sets(minus_gene, minus_config, toy_spec):
     """A set requiring a de novo event in adult-onset cancer is not a research plan."""
     from vus_foresight.acmg import FeasibilityTag
 
@@ -223,8 +209,7 @@ def test_intractable_evidence_is_excluded_from_proposed_sets(
     for result in _run(minus_gene, minus_config, toy_spec):
         for evidence_set in result.row.minimum_sufficient_sets:
             assert all(
-                r.feasibility is not FeasibilityTag.INTRACTABLE
-                for r in evidence_set.requirements
+                r.feasibility is not FeasibilityTag.INTRACTABLE for r in evidence_set.requirements
             )
 
 

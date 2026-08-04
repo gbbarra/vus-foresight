@@ -93,8 +93,7 @@ def parse_variant_summary(
         for required in ("Name", "ClinicalSignificance", "ReviewStatus"):
             if required not in fields:
                 raise ValueError(
-                    f"{path}: missing required column {required!r}. Columns seen: "
-                    f"{sorted(fields)}"
+                    f"{path}: missing required column {required!r}. Columns seen: {sorted(fields)}"
                 )
         assembly_column = fields.get("Assembly")
         evaluated_column = fields.get("LastEvaluated")

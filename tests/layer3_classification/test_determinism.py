@@ -53,9 +53,7 @@ def _rows(minus_gene, minus_config, toy_spec, limit: int | None = None):
     return [result.row for result in runner.run(variants)]
 
 
-def test_two_runs_produce_byte_identical_parquet(
-    tmp_path, minus_gene, minus_config, toy_spec
-):
+def test_two_runs_produce_byte_identical_parquet(tmp_path, minus_gene, minus_config, toy_spec):
     first, second = tmp_path / "a.parquet", tmp_path / "b.parquet"
     write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), first)
     write_parquet(_rows(minus_gene, minus_config, toy_spec, 300), second)
@@ -77,9 +75,7 @@ def test_row_order_follows_the_enumerator_not_a_set(minus_gene, minus_config, to
     assert first[:3] == ["c.1A>C", "c.1A>G", "c.1A>T"]
 
 
-def test_criteria_within_a_row_are_deterministically_ordered(
-    minus_gene, minus_config, toy_spec
-):
+def test_criteria_within_a_row_are_deterministically_ordered(minus_gene, minus_config, toy_spec):
     for row in _rows(minus_gene, minus_config, toy_spec, 100):
         applied = [c.code for c in row.criteria_applied]
         skipped = [s.code for s in row.criteria_evaluated_not_applied]
@@ -93,17 +89,17 @@ def test_source_versions_are_stored_sorted(minus_gene, minus_config, toy_spec):
         assert keys == sorted(keys)
 
 
-def test_equivalence_class_ids_are_stable_across_runs(
-    minus_gene, minus_config, toy_spec
-):
-    first = {r.hgvs_c: r.equivalence_class_id for r in _rows(minus_gene, minus_config, toy_spec, 200)}
-    second = {r.hgvs_c: r.equivalence_class_id for r in _rows(minus_gene, minus_config, toy_spec, 200)}
+def test_equivalence_class_ids_are_stable_across_runs(minus_gene, minus_config, toy_spec):
+    first = {
+        r.hgvs_c: r.equivalence_class_id for r in _rows(minus_gene, minus_config, toy_spec, 200)
+    }
+    second = {
+        r.hgvs_c: r.equivalence_class_id for r in _rows(minus_gene, minus_config, toy_spec, 200)
+    }
     assert first == second
 
 
-def test_variants_with_the_same_intrinsic_profile_share_a_class(
-    minus_gene, minus_config, toy_spec
-):
+def test_variants_with_the_same_intrinsic_profile_share_a_class(minus_gene, minus_config, toy_spec):
     """And missense never collapses, per spec section 5."""
     from vus_foresight.variant import Consequence
 
