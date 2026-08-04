@@ -1,14 +1,43 @@
 name: ci
 
+# Which gates from CLAUDE.md section 4.6 are live is stated per step rather than
+# left to be inferred. Declaring a gate and then bypassing it is worse than not
+# declaring it: a green check that means nothing gets read as one that means
+# something.
+#
+#   pytest, whole suite            BLOCKING
+#   enumeration invariants         BLOCKING
+#   determinism                    BLOCKING
+#   ruff check / format            reported, blocking from phase 3
+#   mypy                           reported, blocking from phase 4
+#   branch coverage >= 80%         reported, blocking from phase 9
+#   bandit / detect-secrets        phase 10
+
 on:
+  # Was push on every branch plus pull_request, which ran the suite twice for
+  # every push to a branch with an open pull request -- visible as pairs of runs
+  # a second apart in the history. The pull request is the thing being gated.
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# A second push makes the first run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      # A break on one version and not the other is a real finding, so neither
+      # cancels the other.
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
@@ -16,6 +45,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Install
         run: |
           python -m pip install --upgrade pip
@@ -23,7 +53,27 @@ jobs:
       - name: Layers 1-3
         # The section 10 protocol is a validation study, not a unit test, and is
         # excluded here on purpose.
-        run: pytest -q -m "not validation_study"
+        #
+        # -rs prints why each test skipped. Four of them need curated fixtures
+        # that are deliberately not committed, and a silent skip lets "231
+        # passed" be read as "every oracle ran".
+        run: pytest -m "not validation_study" -rs --cov --cov-report=term-missing
+      - name: Enumeration invariants against the real transcripts
+        # Runs because the MANE reference is committed: these are the section 11
+        # cardinalities against real BRCA1 and BRCA2 -- 16,776 and 30,771 coding
+        # SNVs, 100,656 and 184,626 intra-codon MNVs. If a coordinate ever
+        # moves, this is what says so, and it says so against the gene rather
+        # than against a synthetic fixture.
+        run: pytest -m requires_reference -rs -v
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Coverage (Python ${{ matrix.python-version }})"
+            echo '```'
+            coverage report
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Determinism, checked twice in separate processes
         run: |
           vus-foresight selftest --out /tmp/first.parquet
@@ -49,3 +99,54 @@ jobs:
               print(f"{path.name}: {config.gene} / {config.transcript.id}, "
                     f"coordinates_imported={config.transcript.has_coordinates}")
           PY
+
+  quality:
+    name: lint and types
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # continue-on-error with an end date, not indefinitely. These report real
+      # counts on every pull request from today, which is what makes the
+      # cleanup measurable, and each flag comes off in the phase that clears its
+      # findings. The phase is in the step name so an unflipped flag shows up in
+      # the run itself, not only in a document nobody rereads.
+      - name: ruff check (blocking from phase 3)
+        continue-on-error: true
+        run: ruff check src tests --output-format=github
+      - name: ruff format --check (blocking from phase 3)
+        continue-on-error: true
+        run: ruff format --check src tests
+      - name: mypy (blocking from phase 4)
+        continue-on-error: true
+        run: mypy
+
+      - name: Report the counts
+        if: always()
+        run: |
+          checks=$(ruff check src tests --statistics 2>/dev/null | awk '{s+=$1} END {print s+0}')
+          # ruff reports the tally on its last line ("N files would be
+          # reformatted, M files already formatted"), and prints nothing of the
+          # sort when there is nothing to do -- hence the 0 default.
+          fmt=$(ruff format --check src tests 2>&1 \
+            | sed -n 's/^\([0-9]\+\) files\? would be reformatted.*/\1/p' | tail -1)
+          fmt=${fmt:-0}
+          types=$(mypy 2>/dev/null | grep -c 'error:' || true)
+          {
+            echo "### Quality debt"
+            echo ""
+            echo "| gate | findings | blocking from |"
+            echo "|---|---:|---|"
+            echo "| ruff check | ${checks} | phase 3 |"
+            echo "| ruff format | ${fmt} files | phase 3 |"
+            echo "| mypy | ${types} | phase 4 |"
+          } >> "$GITHUB_STEP_SUMMARY"
