@@ -1,0 +1,17 @@
+metric	value
+considered	0
+resolved	0
+resolvability_recall	
+cause_accuracy	
+cause_scored	0
+unobserved_cause	0
+direction_accuracy	
+direction_scored	0
+direction_unpredicted	0
+temporal_correlation	
+anticipated	0
+saw_evidence_only	0
+unmoved	0
+ahead_of_clinvar	524
+anticipation_rate	
+evidence_visibility_rate	
