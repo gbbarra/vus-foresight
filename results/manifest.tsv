@@ -1,0 +1,12 @@
+key	value	digest
+run_id	30903730471	
+code_ref	claude/brca-evidence-gap-map-vyaubj	
+code_sha	35bc6240dcca6afed6792a811a57b2e5f994479f	
+genes	BRCA1,BRCA2	
+spec_thresholds_curated	False	
+snapshot:clinvar_2026-08-04_BRCA1.tsv	13178	50f603ef9398d1222eb3b7687763c9b4eb9b8a5cb1d816fb1e6cc5b1b109e03c
+snapshot:clinvar_2026-08-04_BRCA2.tsv	21408	a3f7e535573cbb341e87fa5ccdf277b22839eaa3fed73203bf56eb959629cb7a
+map:out/2026-08-04/gene=BRCA1/gap_map.parquet	135935	c7595f598eb86e84cc43e1873ad97a17d3df2656c8f7c1f92c5ab5af48d5e86f
+map:out/2026-08-04/gene=BRCA1/gap_map_cnv.parquet	552	8b31f1ad984a2fd00d1b260b461a6b604389ffabb66adc6d223a16a26bde3832
+map:out/2026-08-04/gene=BRCA2/gap_map.parquet	243280	44108600c99d5e35d638dbb8e411d7d6402d65e606f15315adcbca8bd92b2433
+map:out/2026-08-04/gene=BRCA2/gap_map_cnv.parquet	756	dbdabb9249909e1018993d8635a8c6f3b3d559ac10761cc41db40b28ddd43d92
