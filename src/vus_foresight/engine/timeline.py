@@ -15,7 +15,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
+from itertools import pairwise
 
 from ..acmg import ACMGClass, BlockingReason, EvidenceClass
 from ..gapmap import GapMapRow
@@ -29,7 +30,7 @@ __all__ = [
 ]
 
 
-class TransitionCause(str, Enum):
+class TransitionCause(StrEnum):
     """Why a variant's classification moved between two snapshots."""
 
     #: Only semi-intrinsic criteria changed. Nothing new was learned about this
@@ -317,5 +318,5 @@ def compare_series(
             label_before=label_older,
             label_after=label_newer,
         )
-        for (label_older, older), (label_newer, newer) in zip(snapshots, snapshots[1:])
+        for (label_older, older), (label_newer, newer) in pairwise(snapshots)
     ]

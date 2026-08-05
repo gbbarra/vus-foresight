@@ -13,7 +13,7 @@ the single place where strength is turned into a number.
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,14 +31,14 @@ __all__ = [
 ]
 
 
-class Direction(str, Enum):
+class Direction(StrEnum):
     """Which way a criterion pushes."""
 
     PATHOGENIC = "pathogenic"
     BENIGN = "benign"
 
 
-class Strength(str, Enum):
+class Strength(StrEnum):
     """Evidence strength labels used by ACMG/AMP.
 
     ``STAND_ALONE`` is benign-only (BA1); ``VERY_STRONG`` is pathogenic-only in
@@ -63,7 +63,7 @@ STRENGTH_ORDER: tuple[Strength, ...] = (
 )
 
 
-class ACMGClass(str, Enum):
+class ACMGClass(StrEnum):
     """The five-tier terminology."""
 
     PATHOGENIC = "P"
@@ -73,7 +73,7 @@ class ACMGClass(str, Enum):
     BENIGN = "B"
 
 
-class EvidenceClass(str, Enum):
+class EvidenceClass(StrEnum):
     """Spec section 4 -- the backbone distinction of the whole project.
 
     ``INTRINSIC``      computable with no patient anywhere.
@@ -86,7 +86,7 @@ class EvidenceClass(str, Enum):
     EXTRINSIC = "extrinsic"
 
 
-class FeasibilityTag(str, Enum):
+class FeasibilityTag(StrEnum):
     """How hard it would be to actually acquire a missing piece of evidence.
 
     ``AVAILABLE_UNINGESTED`` is the headline finding of the whole system: the
@@ -112,7 +112,7 @@ FEASIBILITY_COST: dict[FeasibilityTag, int] = {
 }
 
 
-class BlockingReason(str, Enum):
+class BlockingReason(StrEnum):
     """Why a variant sits at VUS -- categorised so the map is ``GROUP BY``-able.
 
     The question "how many BRCA2 VUS are blocked for want of functional data?"
@@ -129,7 +129,7 @@ class BlockingReason(str, Enum):
     RESOLVED_NOT_BLOCKED = "RESOLVED_NOT_BLOCKED"
 
 
-class CriterionOutcome(str, Enum):
+class CriterionOutcome(StrEnum):
     """The result of testing one criterion against one variant.
 
     Every criterion in the specification gets exactly one of these for every
@@ -143,7 +143,7 @@ class CriterionOutcome(str, Enum):
     NOT_APPLICABLE = "not_applicable"
 
 
-class SkipReason(str, Enum):
+class SkipReason(StrEnum):
     """Why a criterion was not applied. Machine-readable, never prose."""
 
     RULE_NOT_MET = "rule_not_met"

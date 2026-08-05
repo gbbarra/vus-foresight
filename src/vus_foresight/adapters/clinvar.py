@@ -120,7 +120,7 @@ def protein_change_kind(hgvs_p: str | None) -> str:
         return "unpredictable"
     if "fs" in text or "ext" in text:
         return "truncating"
-    if text.endswith("Ter") or text.endswith("*"):
+    if text.endswith(("Ter", "*")):
         return "nonsense"
     if "del" in text or "ins" in text or "dup" in text:
         return "indel"

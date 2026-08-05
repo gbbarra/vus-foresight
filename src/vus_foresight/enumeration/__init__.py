@@ -16,7 +16,7 @@ Explicitly out of scope, and not silently omitted:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from enum import Enum
+from enum import StrEnum
 
 from ..genome.transcript import FlankSequences, Transcript
 from ..variant import Variant
@@ -64,7 +64,7 @@ __all__ = [
 ]
 
 
-class EnumerationClass(str, Enum):
+class EnumerationClass(StrEnum):
     """Selectable enumeration units, so a run can be scoped from the CLI."""
 
     CODING_SNV = "coding_snv"

@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
+from itertools import pairwise
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -153,7 +154,7 @@ class Transcript(BaseModel):
             )
 
         # Exons must be non-overlapping and ordered along the transcript.
-        for prev, nxt in zip(self.exons, self.exons[1:]):
+        for prev, nxt in pairwise(self.exons):
             if self.strand == "+":
                 if nxt.start <= prev.end:
                     raise ValueError(
@@ -241,7 +242,9 @@ class Transcript(BaseModel):
             raise ValueError(
                 f"transcript position {tx_pos} outside 1..{self.length} for {self.transcript_id}"
             )
-        for exon, (tx_start, tx_end) in zip(self.exons, self._exon_tx_bounds):
+        # _exon_tx_bounds is derived from self.exons, so the lengths cannot
+        # differ unless that derivation breaks -- which is worth an exception.
+        for exon, (tx_start, tx_end) in zip(self.exons, self._exon_tx_bounds, strict=True):
             if tx_start <= tx_pos <= tx_end:
                 return self._exon_first_genomic(exon) + self.step * (tx_pos - tx_start)
         raise AssertionError("unreachable: exon bounds do not cover the transcript")
@@ -398,8 +401,7 @@ class Transcript(BaseModel):
 
     def iter_cds_positions(self) -> Iterator[tuple[int, str]]:
         """Yield ``(cds_position, ref_base)`` for the whole CDS, in order."""
-        for i, base in enumerate(self.cds, start=1):
-            yield i, base
+        yield from enumerate(self.cds, start=1)
 
 
 class FlankSequences(BaseModel):

@@ -132,11 +132,13 @@ class RuleNode(BaseModel):
         if self.all is not None:
             # Every branch is evaluated, not short-circuited: the missing-field
             # log has to be complete for the gap report to be complete.
-            return all([node.evaluate(context, log) for node in self.all])
+
+            # comment above says why that must not happen here.
+            return all([node.evaluate(context, log) for node in self.all])  # noqa: C419
         if self.any is not None:
-            return any([node.evaluate(context, log) for node in self.any])
+            return any([node.evaluate(context, log) for node in self.any])  # noqa: C419
         assert self.none is not None
-        return not any([node.evaluate(context, log) for node in self.none])
+        return not any([node.evaluate(context, log) for node in self.none])  # noqa: C419
 
 
 RuleNode.model_rebuild()

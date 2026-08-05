@@ -22,6 +22,7 @@ import gzip
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 from typing import IO
 
@@ -61,7 +62,7 @@ def normalise_chrom(seqname: str) -> str:
 
 
 def _attributes(field: str) -> dict[str, str]:
-    return {key: value for key, value in _ATTRIBUTE.findall(field)}
+    return dict(_ATTRIBUTE.findall(field))
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,8 +194,8 @@ def extract_transcript(
     # genomic coordinates must descend. Checking it here is what stops a
     # differently-conventioned release from silently reversing the gene.
     genomic_starts = [f[2] for f in features]
-    descending = all(a > b for a, b in zip(genomic_starts, genomic_starts[1:]))
-    ascending = all(a < b for a, b in zip(genomic_starts, genomic_starts[1:]))
+    descending = all(a > b for a, b in pairwise(genomic_starts))
+    ascending = all(a < b for a, b in pairwise(genomic_starts))
     if strand == "+" and not ascending:
         raise ReferenceUnavailable(
             f"{transcript_id}: plus strand but exon_number order is not ascending "
@@ -220,7 +221,11 @@ def extract_transcript(
 
     exons = tuple(
         Exon(label=label, start=start, end=end)
-        for label, (_seq, _strand, start, end, _n) in zip(labels, features)
+        # strict: the count is validated a few lines above, so this is a
+        # redundant assertion -- and a free one against a future edit that
+        # drops that check. Silently truncating would build a transcript
+        # missing exons, which is the failure this module exists to prevent.
+        for label, (_seq, _strand, start, end, _n) in zip(labels, features, strict=True)
     )
 
     sequence = _read_fasta_record(fasta_path, transcript_id)

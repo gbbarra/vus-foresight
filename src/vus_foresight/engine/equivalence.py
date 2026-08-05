@@ -38,7 +38,7 @@ def equivalence_key(variant: Variant, evaluation: Evaluation, spec: VCEPSpec) ->
     unevaluable = ";".join(
         s.code for s in evaluation.skipped if s.outcome is CriterionOutcome.NOT_EVALUABLE
     )
-    return "|".join(
+    return "|".join(  # noqa: FLY002 -- a column list diffs one line per column
         [
             variant.gene,
             variant.transcript,

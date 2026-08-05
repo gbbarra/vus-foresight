@@ -177,7 +177,7 @@ def _trailing_comment(rest: str) -> str:
 def _set_scalar(lines: list[str], section: str, key: str, value: int | str) -> list[str]:
     bounds = _section(lines, section)
     if bounds is None:
-        return lines + [f"{section}:", f"{DEFAULT_INDENT}{key}: {_render_scalar(value)}"]
+        return [*lines, f"{section}:", f"{DEFAULT_INDENT}{key}: {_render_scalar(value)}"]
     header, end = bounds
     indent = _body_indent(lines, header, end)
     pattern = re.compile(rf"^{indent}{re.escape(key)}:(?P<rest>.*)$")

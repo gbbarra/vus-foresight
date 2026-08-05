@@ -11,6 +11,7 @@ most likely error in the entire layer" and it is guarded by a dedicated test.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 
 from ..genome.sequence import reverse_complement, translate_codon
 from ..genome.transcript import CPosition, IntronSpan, Transcript, format_c_position
@@ -88,7 +89,7 @@ def genomic_vcf(
     tx_last = transcript.cds_position_to_tx(cds_last)
     genomic = [transcript.genomic_at(t) for t in range(tx_first, tx_last + 1)]
     expected_step = transcript.step
-    for a, b in zip(genomic, genomic[1:]):
+    for a, b in pairwise(genomic):
         if b - a != expected_step:
             return None
 
@@ -114,7 +115,7 @@ def genomic_deletion(transcript: Transcript, cds_first: int, cds_last: int) -> s
     tx_first = transcript.cds_position_to_tx(cds_first)
     tx_last = transcript.cds_position_to_tx(cds_last)
     genomic = [transcript.genomic_at(t) for t in range(tx_first, tx_last + 1)]
-    for a, b in zip(genomic, genomic[1:]):
+    for a, b in pairwise(genomic):
         if b - a != transcript.step:
             return None
     ref_coding = transcript.cds[cds_first - 1 : cds_last]

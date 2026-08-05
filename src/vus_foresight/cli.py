@@ -779,7 +779,7 @@ def timeline_command(
 
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
-        header = "\t".join(
+        header = "\t".join(  # noqa: FLY002 -- a column list diffs one line per column
             [
                 "label_before",
                 "label_after",

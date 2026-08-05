@@ -127,7 +127,7 @@ def test_variants_with_the_same_intrinsic_profile_share_a_class(minus_gene, minu
 
 
 def _golden_lines(rows) -> list[str]:
-    header = "\t".join(
+    header = "\t".join(  # noqa: FLY002 -- a column list diffs one line per column
         [
             "hgvs_c",
             "hgvs_p",
@@ -192,7 +192,9 @@ def test_golden_snapshot(minus_gene, minus_config, toy_spec):
     if produced != expected:
         differences = [
             f"line {i}: expected {e!r}, produced {p!r}"
-            for i, (e, p) in enumerate(zip(expected, produced), start=1)
+            # strict=False: the two differing in length is exactly the case
+            # this message reports, so zip must not raise before reporting it.
+            for i, (e, p) in enumerate(zip(expected, produced, strict=False), start=1)
             if e != p
         ]
         pytest.fail(

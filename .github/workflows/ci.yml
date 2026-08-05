@@ -120,11 +120,9 @@ jobs:
       # cleanup measurable, and each flag comes off in the phase that clears its
       # findings. The phase is in the step name so an unflipped flag shows up in
       # the run itself, not only in a document nobody rereads.
-      - name: ruff check (blocking from phase 3)
-        continue-on-error: true
+      - name: ruff check
         run: ruff check src tests --output-format=github
-      - name: ruff format --check (blocking from phase 3)
-        continue-on-error: true
+      - name: ruff format --check
         run: ruff format --check src tests
       - name: mypy (blocking from phase 4)
         continue-on-error: true
@@ -146,7 +144,7 @@ jobs:
             echo ""
             echo "| gate | findings | blocking from |"
             echo "|---|---:|---|"
-            echo "| ruff check | ${checks} | phase 3 |"
-            echo "| ruff format | ${fmt} files | phase 3 |"
+            echo "| ruff check | ${checks} | now |"
+            echo "| ruff format | ${fmt} files | now |"
             echo "| mypy | ${types} | phase 4 |"
           } >> "$GITHUB_STEP_SUMMARY"

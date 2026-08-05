@@ -34,7 +34,7 @@ VALIDATOR_SAMPLE = FIXTURES / "reference_validator_sample.tsv"
 
 def _read(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
-        return [row for row in csv.DictReader(handle, delimiter="\t")]
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 def _annotate_substitution(transcript, hgvs_c: str):

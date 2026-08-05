@@ -133,7 +133,8 @@ def build_synthetic_gene(
 
     intervals = _exon_intervals(strand, anchor, exon_lengths, intron_lengths)
     exons = tuple(
-        Exon(label=label, start=start, end=end) for label, (start, end) in zip(labels, intervals)
+        Exon(label=label, start=start, end=end)
+        for label, (start, end) in zip(labels, intervals, strict=True)
     )
 
     cursor = 0

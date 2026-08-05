@@ -384,7 +384,7 @@ def spearman(xs: Sequence[float], ys: Sequence[float]) -> float | None:
     rx, ry = _rank(xs), _rank(ys)
     n = len(xs)
     mean_x, mean_y = sum(rx) / n, sum(ry) / n
-    numerator = sum((a - mean_x) * (b - mean_y) for a, b in zip(rx, ry))
+    numerator = sum((a - mean_x) * (b - mean_y) for a, b in zip(rx, ry, strict=True))
     denominator = (sum((a - mean_x) ** 2 for a in rx) * sum((b - mean_y) ** 2 for b in ry)) ** 0.5
     if denominator == 0:
         return None

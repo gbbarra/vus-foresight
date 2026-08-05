@@ -59,8 +59,10 @@ def _write_release(tmp_path, gene, config, *, gzipped=False, accession_seqname=F
     suffix = ".gz" if gzipped else ""
     gtf_path = tmp_path / f"mane.gtf{suffix}"
     fasta_path = tmp_path / f"mane.fna{suffix}"
+    # The lambdas are context-manager factories, consumed by the 'with'
+    # statements below, so SIM115 does not apply.
     opener = (
-        (lambda p: gzip.open(p, "wt", encoding="utf-8"))
+        (lambda p: gzip.open(p, "wt", encoding="utf-8"))  # noqa: SIM115
         if gzipped
         else (lambda p: p.open("w", encoding="utf-8"))
     )
@@ -126,7 +128,7 @@ def test_chromosome_spellings_are_reconciled():
 
 def test_a_gtf_and_fasta_from_different_releases_is_an_error(tmp_path, minus_gene, minus_config):
     """Individually plausible, jointly wrong -- and it shifts every coordinate."""
-    gtf, fasta = _write_release(tmp_path, minus_gene, minus_config)
+    gtf, _fasta = _write_release(tmp_path, minus_gene, minus_config)
     truncated = tmp_path / "short.fna"
     truncated.write_text(
         f">{minus_gene.transcript.transcript_id}\n{minus_gene.transcript.sequence[:-10]}\n",

@@ -6,7 +6,7 @@ this package ever sees patient data (spec section 13).
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class Consequence(str, Enum):
+class Consequence(StrEnum):
     """Molecular consequence, one primary term per variant.
 
     Tier 1 of spec section 3 needs the first seven. The remainder are required
@@ -68,7 +68,7 @@ SPLICE_CONSEQUENCES: frozenset[Consequence] = frozenset(
 )
 
 
-class VariantKind(str, Enum):
+class VariantKind(StrEnum):
     """Which enumeration tier produced this row.
 
     ``FRAMESHIFT_CLASS`` and the CNV kinds are *classes*, not single variants:

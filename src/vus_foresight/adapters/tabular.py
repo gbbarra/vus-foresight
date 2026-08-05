@@ -100,12 +100,17 @@ class TableAdapter(Adapter):
             header = next(reader, None)
             if not header:
                 raise ValueError(f"{path}: snapshot has no header row")
-            key_column, *value_columns = header
+            _key_column, *value_columns = header
             for row in reader:
                 if not row or row[0].startswith("#"):
                     continue
                 payload: dict[str, Any] = {}
-                for column, cell in zip(value_columns, row[1:]):
+                # strict=False is the current behaviour, stated rather than
+                # inherited: a row shorter than the header yields fewer keys,
+                # and every absent key reads as MISSING downstream. A row
+                # LONGER than the header loses cells silently, which is a
+                # malformed-input case that deserves its own test.
+                for column, cell in zip(value_columns, row[1:], strict=False):
                     value = _number(cell)
                     if value is None:
                         continue
