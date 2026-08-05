@@ -110,6 +110,46 @@ strict_equality = true
 module = ["pyarrow.*"]
 ignore_missing_imports = true
 
+[tool.vus-foresight]
+# The modules whose errors produce a number that looks clinically
+# interpretable and is wrong (CLAUDE.md section 7). Enforced by
+# tools/check_module_coverage.py, because coverage.py has no per-file floor
+# and a critical module can otherwise rot while the project total sails past
+# 80% on the back of everything else.
+critical_coverage_floor = 95
+critical_modules = [
+    "acmg.py",
+    "engine/gap.py",
+    "engine/pvs1.py",
+    "engine/evaluator.py",
+    "engine/predicates.py",
+    "engine/equivalence.py",
+    "engine/signature.py",
+    "engine/cnv_scoring.py",
+    "annotate/annotator.py",
+    "annotate/hgvs.py",
+    "annotate/indel.py",
+    "genome/transcript.py",
+    "validation.py",
+]
+
+[tool.bandit]
+# Reported, reviewed, and accepted rather than silenced blindly:
+#
+#   B101 (assert)  Three uses, all type narrowing after a check that already
+#                  raised, or after a model validator that guarantees the
+#                  shape. None of them is a validation guard, which is the
+#                  thing B101 exists to catch.
+#   B311 (random)  Deterministically seeded generation of the synthetic gene
+#                  used by the tests. The determinism IS the requirement --
+#                  the suite compares output bytes -- so a CSPRNG here would
+#                  break the guarantee rather than strengthen anything.
+#
+# CI gates on medium severity and above, which is stricter than the standard's
+# "no high-severity finding" and never weaker. The lows stay visible in the
+# run summary rather than being configured out of existence.
+exclude_dirs = ["tests"]
+
 [tool.coverage.run]
 branch = true
 source = ["src/vus_foresight"]

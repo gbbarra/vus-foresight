@@ -10,8 +10,10 @@ name: ci
 #   determinism                    BLOCKING
 #   ruff check / format            BLOCKING
 #   mypy                           BLOCKING
-#   branch coverage >= 80%         reported, blocking from phase 9
-#   bandit / detect-secrets        phase 10
+#   branch coverage >= 80%         BLOCKING
+#   bandit (medium and above)      BLOCKING
+#   detect-secrets vs baseline     BLOCKING
+#   critical modules >= 95%        reported, blocking once they reach it
 
 on:
   # Was push on every branch plus pull_request, which ran the suite twice for
@@ -57,7 +59,18 @@ jobs:
         # -rs prints why each test skipped. Four of them need curated fixtures
         # that are deliberately not committed, and a silent skip lets "231
         # passed" be read as "every oracle ran".
-        run: pytest -m "not validation_study" -rs --cov --cov-report=term-missing
+        run: |
+          pytest -m "not validation_study" -rs \
+            --cov --cov-report=term-missing --cov-report=json \
+            --cov-fail-under=80
+      # coverage.py enforces one number for the whole project. The standard
+      # sets a second floor for the modules whose errors produce a number that
+      # looks clinically interpretable and is wrong, and without this a
+      # critical module can rot while the total sails past 80% on the back of
+      # everything else.
+      - name: Critical-module coverage floor (blocking once they reach it)
+        continue-on-error: true
+        run: python tools/check_module_coverage.py
       - name: Enumeration invariants against the real transcripts
         # Runs because the MANE reference is committed: these are the section 11
         # cardinalities against real BRCA1 and BRCA2 -- 16,776 and 30,771 coding
@@ -142,3 +155,49 @@ jobs:
             echo "| ruff format | ${fmt} files | now |"
             echo "| mypy | ${types} | now |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  security:
+    name: security and secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # Gated at medium, which is stricter than the standard's "no
+      # high-severity finding" and never weaker. The five low findings are
+      # reviewed and recorded in pyproject under [tool.bandit]: three asserts
+      # used for type narrowing after a check that already raised, and two
+      # deterministically seeded uses of random for the synthetic gene, where
+      # the determinism is the requirement.
+      - name: bandit
+        run: bandit -q -r src/vus_foresight -c pyproject.toml --severity-level medium
+
+      - name: bandit, full report
+        if: always()
+        run: |
+          {
+            echo "### bandit (informational: gate is medium and above)"
+            echo '```'
+            bandit -q -r src/vus_foresight -c pyproject.toml || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The FASTA files are excluded because a file of ACGT cannot carry a
+      # credential, and left in scope their sequence lines match the AWS key
+      # detector's uppercase-alphanumeric pattern on almost every line -- a
+      # baseline full of DNA is a rubber stamp, not a check. The two entries
+      # that remain are the sha256 digests pinning the reference, which exist
+      # in order to be published.
+      - name: detect-secrets
+        run: |
+          detect-secrets scan --baseline .secrets.baseline \
+            --exclude-files '\.git/' --exclude-files 'reference/.*\.fa$'
+          git diff --exit-code .secrets.baseline

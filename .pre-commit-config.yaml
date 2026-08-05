@@ -1,0 +1,68 @@
+# The same gates CI enforces, run before the push instead of after it.
+#
+# Deliberately not identical to CI: the hooks here are the ones that are fast
+# enough to run on every commit without anyone learning to pass --no-verify.
+# The whole suite and the coverage floors stay in CI, where taking a minute is
+# free. A pre-commit configuration people routinely bypass is worse than none,
+# because it makes the CI failure a surprise rather than a confirmation.
+#
+#   pre-commit install          once, per clone
+#   pre-commit run --all-files  to check everything now
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        # The gene and specification configs are rule-as-data: a YAML that does
+        # not parse is a gene that cannot be mapped.
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # The per-variant maps are 4.6 MB of Parquet and belong in a run's
+        # artifact, not in git. This is the mechanical half of that decision.
+        args: [--maxkb=512]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        files: ^src/
+        additional_dependencies:
+          - pydantic>=2.6
+          - types-PyYAML>=6.0
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        # Medium and above, which is stricter than the standard's "no
+        # high-severity finding" and never weaker. The five accepted low
+        # findings are documented in pyproject under [tool.bandit].
+        args: [-q, --severity-level, medium, -c, pyproject.toml]
+        additional_dependencies: ["bandit[toml]"]
+        files: ^src/
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+          # A FASTA is ACGT and nothing else -- verified, and the loader
+          # refuses anything else -- so it cannot carry a credential. Left in
+          # scope, its 200-odd lines match the AWS key detector's uppercase
+          # alphanumeric pattern exactly, and a baseline full of DNA is a
+          # rubber stamp rather than a check.
+          - --exclude-files
+          - 'reference/.*\.fa$'
