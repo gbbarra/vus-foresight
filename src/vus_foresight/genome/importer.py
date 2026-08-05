@@ -262,7 +262,16 @@ def _preflight(lines: list[str], text: str) -> None:
             )
     transcript = parsed.get("transcript")
     if isinstance(transcript, dict) and "exons" in transcript:
-        header, end = _section(lines, "transcript")
+        bounds = _section(lines, "transcript")
+        # The loop above already refused a parsed 'transcript' whose section
+        # cannot be located, so this cannot be None here. Spelled out rather
+        # than asserted so the guarantee survives an edit to that loop.
+        if bounds is None:  # pragma: no cover
+            raise ReferenceUnavailable(
+                "the derived block could not be spliced: 'transcript' is not a "
+                "plain block mapping on its own line."
+            )
+        header, end = bounds
         indent = _body_indent(lines, header, end)
         if not any(lines[i].startswith(f"{indent}exons:") for i in range(header + 1, end)):
             raise ReferenceUnavailable(

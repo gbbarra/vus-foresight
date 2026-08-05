@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,7 @@ from .adapters import (
     PredictorAdapter,
     SpliceAdapter,
 )
+from .adapters.base import Adapter
 from .adapters.clinvar_import import build_snapshot
 from .engine.cnv_scoring import CNVScoringConfig, cnv_row
 from .engine.pipeline import MapRunner, default_registry
@@ -214,7 +216,7 @@ def map_command(
     if not classes:
         raise typer.BadParameter("no enumeration tiers selected")
 
-    extra = []
+    extra: list[Adapter] = []
     if frequency is not None:
         extra.append(
             FrequencyAdapter(
@@ -495,8 +497,10 @@ def validate_command(
     when = date.fromisoformat(reference_date) if reference_date else None
     curated = read_outcomes(outcomes) if outcomes is not None else None
 
-    time_series = map_at_t_plus_n is not None and clinvar_at_t is not None
-    if not time_series:
+    # Narrowed directly rather than through a boolean: both paths below use
+    # these two as non-optional, and an intermediate flag hides that from
+    # the reader as much as from the type checker.
+    if map_at_t_plus_n is None or clinvar_at_t is None:
         if curated is None:
             raise typer.BadParameter(
                 "supply either --outcomes, or --map-at-t-plus-n with --clinvar-at-t "
@@ -615,7 +619,7 @@ def _ratio(value: float | None) -> str:
     return "" if value is None else f"{value:.6f}"
 
 
-def _write_tsv(path: Path, header: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
+def _write_tsv(path: Path, header: tuple[str, ...], rows: Sequence[tuple[str, ...]]) -> None:
     lines = ["\t".join(header)]
     lines += ["\t".join(field.replace("\t", " ") for field in row) for row in rows]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -656,7 +660,7 @@ def data_check(
         sampled = variants[::step][:sample]
         report.sampled = len(sampled)
 
-        adapters = []
+        adapters: list[Adapter] = []
         if frequency is not None:
             adapters.append(FrequencyAdapter(frequency, "check"))
         if predictor is not None:

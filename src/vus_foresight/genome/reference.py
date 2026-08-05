@@ -241,6 +241,16 @@ def build_transcript(config: GeneConfig, *, data_root: str | Path = ".") -> Tran
             f"'vus-foresight reference import' to populate them from MANE Select; "
             f"see docs/reference-data.md."
         )
+    if tc.cds_start_tx is None or tc.cds_end_tx is None:  # pragma: no cover
+        # Unreachable today: TranscriptConfig's model validator requires the two
+        # CDS bounds together, so a half-populated config is rejected when the
+        # YAML is loaded. Kept, and excluded from coverage rather than deleted,
+        # so that relaxing that validator cannot silently pass None into
+        # Transcript -- and so the type checker can see the invariant the
+        # validator enforces at runtime.
+        raise ReferenceUnavailable(
+            f"{config.gene}: cds_start_tx and cds_end_tx must both be present."
+        )
     if config.sequence is None:
         raise ReferenceUnavailable(
             f"{config.gene}: gene config declares no transcript sequence resource."

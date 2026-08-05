@@ -150,8 +150,8 @@ class CriterionSpec(BaseModel):
             yield from self.rule.iter_fields()
         for rung in self.strength_ladder:
             yield from rung.when.iter_fields()
-        for rung in self.feasibility_ladder:
-            yield from rung.when.iter_fields()
+        for feasibility_rung in self.feasibility_ladder:
+            yield from feasibility_rung.when.iter_fields()
         if self.evidence_template:
             yield from TEMPLATE_TOKEN.findall(self.evidence_template)
 

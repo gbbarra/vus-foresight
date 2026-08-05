@@ -9,7 +9,7 @@ name: ci
 #   enumeration invariants         BLOCKING
 #   determinism                    BLOCKING
 #   ruff check / format            BLOCKING
-#   mypy                           reported, blocking from phase 4
+#   mypy                           BLOCKING
 #   branch coverage >= 80%         reported, blocking from phase 9
 #   bandit / detect-secrets        phase 10
 
@@ -119,13 +119,7 @@ jobs:
         run: ruff check src tests --output-format=github
       - name: ruff format --check
         run: ruff format --check src tests
-      # continue-on-error with an end date, not indefinitely: it reports a real
-      # count on every pull request, which is what makes the cleanup
-      # measurable, and the flag comes off in the phase that clears the
-      # findings. The phase is in the step name so an unflipped flag shows up in
-      # the run itself, not only in a document nobody rereads.
-      - name: mypy (blocking from phase 4)
-        continue-on-error: true
+      - name: mypy
         run: mypy
 
       - name: Report the counts
@@ -146,5 +140,5 @@ jobs:
             echo "|---|---:|---|"
             echo "| ruff check | ${checks} | now |"
             echo "| ruff format | ${fmt} files | now |"
-            echo "| mypy | ${types} | phase 4 |"
+            echo "| mypy | ${types} | now |"
           } >> "$GITHUB_STEP_SUMMARY"

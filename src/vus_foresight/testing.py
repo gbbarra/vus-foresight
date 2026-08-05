@@ -17,6 +17,7 @@ import random
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Literal
 
 from .adapters.tabular import FrequencyAdapter, FunctionalAdapter, PredictorAdapter, SpliceAdapter
 from .engine.pipeline import MapRunner, default_registry
@@ -99,7 +100,7 @@ def build_synthetic_gene(
     gene: str = "TOY1",
     transcript_id: str = "NM_999999.1",
     chrom: str = "chr99",
-    strand: str = "+",
+    strand: Literal["+", "-"] = "+",
     seed: int = 20260803,
     protein_length: int = TOY_PROTEIN_LENGTH,
     exon_labels: tuple[str, ...] | None = None,
@@ -177,7 +178,7 @@ def synthetic_gene_config(
     synthetic: SyntheticGene,
     *,
     spec: str = "toy_v0.1.0",
-    lof_mechanism: str = "established",
+    lof_mechanism: Literal["established", "not_established", "unknown"] = "established",
 ) -> GeneConfig:
     """A :class:`GeneConfig` for a synthetic gene, with two functional regions."""
     transcript = synthetic.transcript
@@ -210,7 +211,7 @@ def synthetic_gene_config(
 def build_demo_runner(
     spec_path: str | Path,
     *,
-    strand: str = "-",
+    strand: Literal["+", "-"] = "-",
     computed_at: datetime | None = None,
     clinvar_snapshot_path: str | Path | None = None,
     clinvar_snapshot_date: date | None = None,

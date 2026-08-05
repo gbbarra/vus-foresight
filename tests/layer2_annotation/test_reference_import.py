@@ -284,3 +284,36 @@ def test_read_fasta_refuses_a_multi_record_file(tmp_path):
     path.write_text(">a\nACGT\n>b\nTGCA\n", encoding="ascii")
     with pytest.raises(ReferenceUnavailable, match="exactly one FASTA record"):
         read_fasta(path)
+
+
+def test_a_half_populated_coordinate_block_is_refused_at_config_load(tmp_path, minus_gene):
+    """One CDS bound without the other never reaches the transcript builder.
+
+    Characterisation, and the expectation was wrong rather than the code. This
+    test was written expecting ReferenceUnavailable from build_transcript,
+    because has_coordinates only checks the exon list and cds_start_tx. It
+    fails: TranscriptConfig carries a model validator that requires the two
+    bounds together, so the half-populated state is rejected one step earlier,
+    when the YAML is loaded, and never becomes a GeneConfig at all.
+
+    Earlier and stricter than what was expected, so the code stands. The
+    distinction is also the right one: ReferenceUnavailable means the reference
+    data has not been materialised, while this is a config that contradicts
+    itself, which is a different failure and deserves a different exception.
+    """
+    from pydantic import ValidationError
+
+    fasta, exons = _write_resources(tmp_path, minus_gene)
+    config_path = _curated_config(tmp_path, minus_gene)
+    import_reference(
+        load_gene_config(config_path),
+        sequence_path=fasta,
+        exon_table_path=exons,
+        config_path=config_path,
+    )
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    del raw["transcript"]["cds_end_tx"]
+    config_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="cds_start_tx and cds_end_tx must be set together"):
+        load_gene_config(config_path)
