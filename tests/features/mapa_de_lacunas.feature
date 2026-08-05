@@ -28,8 +28,12 @@ Funcionalidade: O mapa diz o que falta, não apenas o que se sabe
     Então o resultado não deve ser "Incerta"
     E o mapa deve registrar que nada a está travando
 
+  # A variante aqui é truncante, e não de sentido trocado, porque precisa ter
+  # pelo menos um critério aplicado: sobre uma variante sem nenhum critério, a
+  # exigência "todo critério aplicado declara sua evidência" seria verdadeira
+  # sem testar nada.
   Cenário: Nenhum veredito é emitido sem o traço que o sustenta
-    Dado uma variante de sentido trocado sobre a qual nada foi publicado
+    Dado uma variante que interrompe a proteína cedo o suficiente para o transcrito ser degradado
     Quando a classificação for calculada
     Então cada critério aplicado deve declarar a evidência e a fonte que o sustentam
     E cada critério avaliado e não aplicado deve declarar por que não se aplicou
