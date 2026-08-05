@@ -13,7 +13,7 @@ name: ci
 #   branch coverage >= 80%         BLOCKING
 #   bandit (medium and above)      BLOCKING
 #   detect-secrets vs baseline     BLOCKING
-#   critical modules >= 95%        reported, blocking once they reach it
+#   critical modules >= 95%        BLOCKING
 
 on:
   # Was push on every branch plus pull_request, which ran the suite twice for
@@ -68,8 +68,7 @@ jobs:
       # looks clinically interpretable and is wrong, and without this a
       # critical module can rot while the total sails past 80% on the back of
       # everything else.
-      - name: Critical-module coverage floor (blocking once they reach it)
-        continue-on-error: true
+      - name: Critical-module coverage floor
         run: python tools/check_module_coverage.py
       - name: Enumeration invariants against the real transcripts
         # Runs because the MANE reference is committed: these are the section 11

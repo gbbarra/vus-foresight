@@ -15,11 +15,22 @@ How these tests could be wrong, and what is done about it:
   feasible evidence set, a benign lean, a gap already closed), the *rules* are
   varied rather than the rows: the repository's own toy specification is loaded,
   mutated as data, and re-loaded through ``load_spec``.
-* **The specification could be assumed rather than read.** The spec mutations
-  below assert the property they depend on (that PS3 declares
-  ``blocks_as: MISSING_FUNCTIONAL``) before relying on it, so a change to the
-  toy specification fails these tests loudly instead of quietly making them
-  vacuous.
+* **A spec mutation could pass vacuously.** Two of the three cases below expect
+  *no* observed cause, which is also what a broken fixture would produce. The
+  third spells the surviving label out in full, so if the toy specification ever
+  stops mapping PS3 onto ``MISSING_FUNCTIONAL`` that case fails loudly and the
+  premise of the other two is not silently lost.
+* **A branch could be reached without being tested.** Reaching a line and
+  distinguishing its two arms are different things, and the guards below are the
+  cases where they came apart: a closed gap only proves anything on a row whose
+  sufficient sets are all intractable, since a feasible row is resolvable either
+  way; and an absent timing gap only proves anything in a cohort of at least
+  three, since ``spearman`` returns ``None`` below that whatever the code did
+  with it. Each such test states the value the wrong behaviour would produce.
+* **A negative could pass because the premise collapsed.** Every "nothing came
+  out" assertion over the snapshots carries a second variant that *does* come
+  out, so a lost star rating or a mangled classification column fails the test
+  instead of satisfying it.
 * **A metric could be checked only where it is defined.** Half of this module is
   the undefined cases -- no resolutions, no scored directions, no observed
   causes -- because "n/a" and ``0.0`` are different claims about a study, and
@@ -102,18 +113,43 @@ def missense_variants(minus_gene):
     ]
 
 
-@pytest.fixture(scope="module")
-def leaning_benign_row(tmp_path_factory, minus_gene, minus_config, toy_spec, missense_variants):
-    """A real row on which the map leans benign: BP4 fired and nothing else did.
+def _make_everything_intractable(raw):
+    """No criterion in this specification can be obtained by anybody.
 
-    Its ``gap_to_LB`` is ``None`` -- one supporting benign point already reaches
-    the toy threshold -- which makes it the row for both "which way did the map
-    lean" and "a gap already closed contributes no timing point".
+    Not a contrived state: it is what a gene with no assay, no cohort and no
+    predictor coverage looks like. It is also the way to take *feasibility* out
+    of an answer, so that a test about a closed gap cannot pass through the
+    feasible-set fallback it is not testing.
+    """
+    for criterion in raw["criteria"]:
+        criterion["feasibility"] = "intractable"
+        criterion.pop("feasibility_ladder", None)
+    # Keep the sets in the output so the "no feasible route" case is the one
+    # being tested, rather than the empty-set case that hides it.
+    raw["gap"]["include_intractable"] = True
+
+
+def _nonsense_variants(gene):
+    return [
+        v for v in enumerate_coding_snvs(gene.transcript) if v.consequence is Consequence.NONSENSE
+    ][:6]
+
+
+def _benign_predictor_table(directory: Path, variant) -> Path:
+    table = directory / "bayesdel_low.tsv"
+    table.write_text(f"grch38_pos\tbayesdel\n{variant.grch38_pos}\t0.05\n", encoding="utf-8")
+    return table
+
+
+@pytest.fixture(scope="module")
+def predictor_map(tmp_path_factory, minus_gene, minus_config, toy_spec, missense_variants):
+    """A real map in which exactly one variant carries a benign predictor call.
+
+    The whole map is returned, not just that row: metric 4 needs several
+    variants with *different* gaps before a rank correlation exists at all.
     """
     target = missense_variants[0]
-    table = tmp_path_factory.mktemp("predictor") / "bayesdel_low.tsv"
-    table.write_text(f"grch38_pos\tbayesdel\n{target.grch38_pos}\t0.05\n", encoding="utf-8")
-
+    table = _benign_predictor_table(tmp_path_factory.mktemp("predictor"), target)
     rows = _map(
         minus_gene,
         minus_config,
@@ -121,40 +157,58 @@ def leaning_benign_row(tmp_path_factory, minus_gene, minus_config, toy_spec, mis
         missense_variants[:20],
         adapters=[PredictorAdapter(table, "t")],
     )
-    return next(row for row in rows if row.hgvs_c == target.hgvs_c)
+    return rows, target.hgvs_c
 
 
 @pytest.fixture(scope="module")
-def verdict_reached_row(minus_gene, minus_config, toy_spec):
-    """A real row the map already carried past LP, so ``gap_to_LP`` is ``None``."""
-    nonsense = [
-        v
-        for v in enumerate_coding_snvs(minus_gene.transcript)
-        if v.consequence is Consequence.NONSENSE
-    ][:6]
-    rows = _map(minus_gene, minus_config, toy_spec, nonsense)
-    return next(row for row in rows if row.gap_to_LP is None)
+def leaning_benign_row(predictor_map):
+    """A real row on which the map leans benign: BP4 fired and nothing else did.
+
+    Its ``gap_to_LB`` is ``None`` -- one supporting benign point already reaches
+    the toy threshold -- which makes it the row for both "which way did the map
+    lean" and "a gap already closed contributes no timing point".
+    """
+    rows, hgvs_c = predictor_map
+    return next(row for row in rows if row.hgvs_c == hgvs_c)
+
+
+@pytest.fixture(scope="module")
+def rows_past_a_verdict(tmp_path_factory, minus_gene, minus_config, missense_variants):
+    """One row past LP and one past LB, under a spec where nothing is obtainable.
+
+    Both directions are needed and the intractable specification is the point:
+    with every sufficient set intractable, the feasible-set fallback answers
+    *no*, so anything these rows still get scored as resolvable comes from the
+    closed gap and from nothing else.
+    """
+    directory = tmp_path_factory.mktemp("past-verdict")
+    spec = _spec_variant(directory / "intractable.yaml", _make_everything_intractable)
+    target = missense_variants[0]
+    table = _benign_predictor_table(directory, target)
+
+    leaning = _map(
+        minus_gene,
+        minus_config,
+        spec,
+        missense_variants[:12],
+        adapters=[PredictorAdapter(table, "t")],
+    )
+    truncating = _map(minus_gene, minus_config, spec, _nonsense_variants(minus_gene))
+    return {
+        "gap_to_LB": next(row for row in leaning if row.hgvs_c == target.hgvs_c),
+        "gap_to_LP": next(row for row in truncating if row.gap_to_LP is None),
+    }
 
 
 @pytest.fixture(scope="module")
 def no_feasible_route_rows(tmp_path_factory, minus_gene, minus_config, missense_variants):
     """A map computed under a specification whose every criterion is intractable.
 
-    Not a contrived state: it is what a gene with no assay, no cohort and no
-    predictor coverage looks like, and it is the only state in which the map
-    reports a finite gap it cannot tell anyone how to close.
+    The only state in which the map reports a finite gap it cannot tell anyone
+    how to close.
     """
     directory = tmp_path_factory.mktemp("intractable")
-
-    def make_everything_intractable(raw):
-        for criterion in raw["criteria"]:
-            criterion["feasibility"] = "intractable"
-            criterion.pop("feasibility_ladder", None)
-        # Keep the sets in the output so the "no feasible route" case is the
-        # one being tested, rather than the empty-set case that hides it.
-        raw["gap"]["include_intractable"] = True
-
-    spec = _spec_variant(directory / "intractable.yaml", make_everything_intractable)
+    spec = _spec_variant(directory / "intractable.yaml", _make_everything_intractable)
     return _map(minus_gene, minus_config, spec, missense_variants[:12])
 
 
@@ -389,13 +443,31 @@ def test_a_variant_that_left_the_archive_is_not_counted_as_a_resolution():
 
     Counting the disappearance would inflate metric 1's denominator with cases
     the map was never given a chance to be right about.
+
+    The second variant is present in both snapshots and carries the test: an
+    empty result would otherwise be indistinguishable from a fixture in which
+    nothing was eligible in the first place, and the withdrawal would go
+    unmeasured. What is asserted is that exactly one of the two survives.
     """
     before = ClinVarSnapshot.from_records(
-        [ClinVarRecord("c.10A>G", "p.Thr4Ala", "uncertain", 2, 4)]
+        [
+            ClinVarRecord("c.10A>G", "p.Thr4Ala", "uncertain", 2, 4),
+            ClinVarRecord("c.11C>T", "p.Thr4Ile", "uncertain", 2, 4),
+        ]
     )
-    after = ClinVarSnapshot.from_records([ClinVarRecord("c.11C>T", "p.Thr4Ile", "benign", 2, 4)])
+    after = ClinVarSnapshot.from_records(
+        [ClinVarRecord("c.11C>T", "p.Thr4Ile", "benign", 2, 4, date(2024, 5, 1))]
+    )
 
-    assert outcomes_from_snapshots(before, after, transcript_id="NM_1.1") == []
+    assert outcomes_from_snapshots(before, after, transcript_id="NM_1.1") == [
+        Outcome(
+            variant_id="NM_1.1:c.11C>T",
+            class_at_t=ACMGClass.UNCERTAIN,
+            class_at_t_plus_n=ACMGClass.BENIGN,
+            evidence_type="",
+            resolved_on=date(2024, 5, 1),
+        )
+    ]
 
 
 def test_a_classification_the_study_cannot_map_is_dropped_rather_than_guessed(tmp_path):
@@ -406,10 +478,28 @@ def test_a_classification_the_study_cannot_map_is_dropped_rather_than_guessed(tm
     here as a raw string. Dropping it keeps an unrecognised word out of the
     numerator of every metric; the alternative is scoring against a class nobody
     has decided the meaning of.
+
+    Only the first of the two variants is unreadable. The second is the control
+    that keeps the assertion honest: this snapshot goes through a real
+    ``write_snapshot``/``read`` round trip, so an empty result on its own would
+    also be what a lost star rating or a mangled classification column looks
+    like, and the drop would never be attributable to the term.
     """
     before_path, after_path = tmp_path / "cv_t.tsv", tmp_path / "cv_tn.tsv"
-    write_snapshot([ClinVarRecord("c.10A>G", "p.Thr4Ala", "uncertain", 2, 4)], before_path)
-    write_snapshot([ClinVarRecord("c.10A>G", "p.Thr4Ala", "drug_response", 2, 4)], after_path)
+    write_snapshot(
+        [
+            ClinVarRecord("c.10A>G", "p.Thr4Ala", "uncertain", 2, 4),
+            ClinVarRecord("c.11C>T", "p.Thr4Ile", "uncertain", 2, 4),
+        ],
+        before_path,
+    )
+    write_snapshot(
+        [
+            ClinVarRecord("c.10A>G", "p.Thr4Ala", "drug_response", 2, 4),
+            ClinVarRecord("c.11C>T", "p.Thr4Ile", "likely_benign", 2, 4, date(2024, 5, 1)),
+        ],
+        after_path,
+    )
 
     outcomes = outcomes_from_snapshots(
         ClinVarSnapshot.read(before_path),
@@ -417,7 +507,15 @@ def test_a_classification_the_study_cannot_map_is_dropped_rather_than_guessed(tm
         transcript_id="NM_1.1",
     )
 
-    assert outcomes == []
+    assert outcomes == [
+        Outcome(
+            variant_id="NM_1.1:c.11C>T",
+            class_at_t=ACMGClass.UNCERTAIN,
+            class_at_t_plus_n=ACMGClass.LIKELY_BENIGN,
+            evidence_type="",
+            resolved_on=date(2024, 5, 1),
+        )
+    ]
 
 
 # --------------------------------------------------------------------------
@@ -483,22 +581,25 @@ def test_an_observed_cause_survives_only_while_the_spec_can_explain_it(
 
 
 @pytest.mark.parametrize(
-    ("row_fixture", "closed_gap"),
-    [
-        pytest.param("verdict_reached_row", "gap_to_LP", id="already-past-LP"),
-        pytest.param("leaning_benign_row", "gap_to_LB", id="already-past-LB"),
-    ],
+    "closed_gap", ["gap_to_LP", "gap_to_LB"], ids=["already-past-LP", "already-past-LB"]
 )
-def test_a_variant_already_past_a_verdict_counts_as_resolvable(request, row_fixture, closed_gap):
+def test_a_variant_already_past_a_verdict_counts_as_resolvable(rows_past_a_verdict, closed_gap):
     """No gap in one direction means nothing is left to obtain.
 
     Falling through to the sufficient-set check here would mark a variant the
     map had *already* resolved as unresolvable, which is metric 1 counting its
     own successes as failures.
+
+    Both rows are computed under the specification in which every sufficient set
+    is intractable, and that is what makes the answer mean something: the
+    fallback says *not resolvable* for these rows, so ``True`` can only have
+    come from the closed gap. A row with feasible sets would have been scored
+    resolvable either way and would have tested nothing.
     """
-    row = request.getfixturevalue(row_fixture)
+    row = rows_past_a_verdict[closed_gap]
 
     assert getattr(row, closed_gap) is None
+    assert {s.feasibility for s in row.minimum_sufficient_sets} == {FeasibilityTag.INTRACTABLE}
     assert is_resolvable(row) is True
 
 
@@ -655,25 +756,55 @@ def test_a_lean_in_the_wrong_direction_is_scored_wrong_and_not_quietly_dropped(
     assert result.direction_unpredicted == 0
 
 
-def test_a_gap_already_closed_contributes_no_point_to_the_timing_correlation(
-    leaning_benign_row,
-):
+def test_a_gap_already_closed_contributes_no_point_to_the_timing_correlation(predictor_map):
     """Metric 4 correlates gap size against delay, and there is no gap here.
 
-    ``gap_to_LB`` is ``None`` because the map had already reached LB, so there
-    is no distance to correlate. Treating the absent gap as zero would put a
-    made-up point into the rank correlation -- and with three points it would
-    determine the sign of the published rho.
+    The cohort is built so that the answer distinguishes *skipped* from
+    *counted as zero*, which a single-variant cohort cannot do -- ``spearman``
+    returns ``None`` below three points, so any one-row study reports ``None``
+    whatever the code does with the absent gap.
+
+    Three variants carry a real gap and are resolved in the exact reverse order
+    of its size, a rank correlation of exactly ``-1``:
+
+    ====================  ====  =====
+    gap the metric reads  gap   days
+    ====================  ====  =====
+    ``gap_to_LP`` (P)     6      100
+    ``gap_to_LP`` (P)     4      500
+    ``gap_to_LB`` (B)     3     1000
+    ====================  ====  =====
+
+    The fourth is the row whose ``gap_to_LB`` is ``None`` because the map had
+    already reached LB: no distance, so no point. Were that absent gap read as
+    zero, its 300-day delay would land out of rank order and rho would fall to
+    ``-0.4``. So ``-1`` is the assertion that the made-up point stayed out.
     """
-    outcome = Outcome(
-        variant_id=leaning_benign_row.variant_id,
-        class_at_t=ACMGClass.UNCERTAIN,
-        class_at_t_plus_n=ACMGClass.LIKELY_BENIGN,
-        resolved_on=date(2020, 6, 1),
+    rows, _ = predictor_map
+    reference = date(2018, 1, 1)
+    unevidenced = [row for row in rows if row.gap_to_LP == 6 and row.gap_to_LB == 1]
+    leaning_pathogenic = [row for row in rows if row.gap_to_LP == 4 and row.gap_to_LB == 3]
+    closed = next(row for row in rows if row.gap_to_LB is None)
+
+    def outcome(row, tier, resolved_on):
+        return Outcome(
+            variant_id=row.variant_id,
+            class_at_t=ACMGClass.UNCERTAIN,
+            class_at_t_plus_n=tier,
+            resolved_on=resolved_on,
+        )
+
+    result = validate(
+        rows,
+        [
+            outcome(unevidenced[0], ACMGClass.PATHOGENIC, date(2018, 4, 11)),  # gap 6, 100 days
+            outcome(leaning_pathogenic[0], ACMGClass.PATHOGENIC, date(2019, 5, 16)),  # gap 4, 500
+            outcome(leaning_pathogenic[1], ACMGClass.BENIGN, date(2020, 9, 27)),  # gap 3, 1000
+            outcome(closed, ACMGClass.LIKELY_BENIGN, date(2018, 10, 28)),  # no gap, 300 days
+        ],
+        reference_date=reference,
     )
 
-    result = validate([leaning_benign_row], [outcome], reference_date=date(2018, 1, 1))
-
-    assert leaning_benign_row.gap_to_LB is None
-    assert result.direction_correct == 1
-    assert result.temporal_correlation is None
+    assert closed.gap_to_LB is None
+    assert result.resolved == 4
+    assert result.temporal_correlation == pytest.approx(-1.0)
