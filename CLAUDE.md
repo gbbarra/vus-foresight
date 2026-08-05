@@ -90,14 +90,24 @@ pytest tests/features/ -v
 # métricas de complexidade e manutenibilidade
 radon cc -s -a src/vus_foresight && radon mi src/vus_foresight
 
-# segurança e segredos
-bandit -q -r src/vus_foresight
-detect-secrets scan --baseline .secrets.baseline
+# segurança e segredos (o CI reprova em medium+, mais estrito que o §4.6)
+bandit -q -r src/vus_foresight -c pyproject.toml --severity-level medium
+detect-secrets scan --baseline .secrets.baseline \
+  --exclude-files '\.git/' --exclude-files 'reference/.*\.fa$'
 
-# teste de mutação (lento — sob demanda, restrito aos módulos críticos)
+# o piso de 95% dos módulos críticos, que o coverage.py não sabe impor
+pytest -m "not validation_study" --cov --cov-report=json
+python tools/check_module_coverage.py
+
+# os mesmos gates rápidos, antes do push
+pre-commit install
+pre-commit run --all-files
+
+# teste de mutação (lento — sob demanda; escopo em [tool.mutmut] do pyproject)
 pip install -e ".[mutation]"
-mutmut run --paths-to-mutate src/vus_foresight/acmg.py,src/vus_foresight/engine/gap.py
+mutmut run
 mutmut results
+mutmut show <id>              # o diff de um mutante sobrevivente
 
 # o pipeline em um gene sintético, sem nenhum dado externo
 vus-foresight selftest
@@ -201,10 +211,20 @@ O pipeline deve falhar (exit code ≠ 0) se qualquer etapa não passar:
 - [ ] `mypy` sem erros
 - [ ] `pytest` com toda a suíte verde
 - [ ] cobertura de branches ≥ 80%
-- [ ] `bandit` sem achado de severidade alta
+- [ ] `bandit` sem achado de severidade alta — **o CI reprova em `medium`**, mais
+      estrito que este item e nunca mais frouxo. Os cinco achados `LOW` existentes
+      estão revisados e registrados em `[tool.bandit]` do `pyproject`, com o motivo
+      de cada um, em vez de silenciados
 - [ ] nenhum segredo commitado (`detect-secrets`)
+- [ ] cobertura ≥95% em cada módulo crítico da §7 (`tools/check_module_coverage.py`;
+      o `coverage.py` só sabe impor um número global, e sem isto um módulo crítico
+      apodrece enquanto o total se sustenta nas costas do resto)
 
-Espelhe os mesmos gates em `pre-commit` para pegar antes do push.
+Espelhe os mesmos gates em `pre-commit` para pegar antes do push — mas só os
+rápidos. A suíte inteira e os pisos de cobertura ficam no CI, onde levar um minuto
+não custa nada: um `pre-commit` que as pessoas aprendem a contornar com
+`--no-verify` é pior que nenhum, porque transforma a falha do CI em surpresa em vez
+de confirmação.
 
 ---
 

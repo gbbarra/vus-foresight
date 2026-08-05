@@ -150,6 +150,29 @@ critical_modules = [
 # run summary rather than being configured out of existence.
 exclude_dirs = ["tests"]
 
+[tool.mutmut]
+# Mutation testing, run on demand and never in CI (CLAUDE.md section 4.4).
+#
+# Scoped to the modules where a surviving mutant is blocking: a mutant that
+# lives in clinical decision or calculation code is, by definition, a change
+# to a published number that no test noticed.
+paths_to_mutate = [
+    "src/vus_foresight/acmg.py",
+    "src/vus_foresight/engine/gap.py",
+    "src/vus_foresight/engine/pvs1.py",
+    "src/vus_foresight/engine/predicates.py",
+    "src/vus_foresight/engine/equivalence.py",
+    "src/vus_foresight/engine/signature.py",
+    "src/vus_foresight/engine/cnv_scoring.py",
+]
+# The section 10 protocol is a study whose result is a finding about the data,
+# not a pass/fail about the code, so it cannot kill a mutant either way.
+pytest_add_cli_args = ["-p", "no:cacheprovider", "-m", "not validation_study"]
+# Only lines the suite actually executes. A mutant on an unreached line is
+# guaranteed to survive and says nothing that the coverage floor does not
+# already say, more cheaply.
+mutate_only_covered_lines = true
+
 [tool.coverage.run]
 branch = true
 source = ["src/vus_foresight"]
