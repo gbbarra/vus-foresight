@@ -224,3 +224,111 @@ def test_resolved_variants_are_not_marked_blocked(minus_gene, minus_config, toy_
             assert row.blocking_reason is BlockingReason.RESOLVED_NOT_BLOCKED
         else:
             assert row.blocking_reason is not BlockingReason.RESOLVED_NOT_BLOCKED
+
+
+# --------------------------------------------------------------------------
+# Mutually exclusive criteria.
+#
+# A mutex group says "these describe the same evidence at different
+# strengths". The shipped rules are written to be disjoint, so the resolution
+# never fires there -- which is exactly why it needs its own test: an
+# unexercised tie-break in the point total is a wrong number waiting for the
+# first specification whose ranges overlap.
+# --------------------------------------------------------------------------
+
+
+def _spec_with_overlapping_frequency_rules(toy_spec):
+    """Widen BS1 so that a high frequency satisfies BA1 and BS1 at once."""
+    from vus_foresight.engine.predicates import Leaf, RuleNode
+
+    widened = RuleNode(leaf=Leaf(field="frequency.gnomad.faf95_popmax", op="ge", value=0.0001))
+    criteria = tuple(
+        c.model_copy(update={"rule": widened}) if c.code == "BS1" else c for c in toy_spec.criteria
+    )
+    return toy_spec.model_copy(update={"criteria": criteria})
+
+
+def _row_with_frequency(tmp_path, gene, config, spec, faf: float):
+    """One row through the real pipeline, with a frequency snapshot loaded."""
+    from datetime import datetime
+
+    from vus_foresight.adapters import AdapterRegistry
+    from vus_foresight.adapters.builtin import RegionAdapter, TranscriptAdapter, VariantAdapter
+    from vus_foresight.adapters.tabular import FrequencyAdapter
+    from vus_foresight.engine.pipeline import MapRunner
+    from vus_foresight.enumeration import enumerate_coding_snvs
+    from vus_foresight.variant import Consequence
+
+    # A missense, not the first coding SNV: that one is start-lost and brings
+    # PVS1 along, which is a different criterion in a different group.
+    variant = next(
+        v for v in enumerate_coding_snvs(gene.transcript) if v.consequence is Consequence.MISSENSE
+    )
+    snapshot = tmp_path / "frequency.tsv"
+    snapshot.write_text(
+        f"grch38_pos\tgnomad.faf95_popmax\n{variant.grch38_pos}\t{faf}\n",
+        encoding="utf-8",
+    )
+    runner = MapRunner(
+        transcript=gene.transcript,
+        gene=config,
+        spec=spec,
+        adapters=AdapterRegistry(
+            [
+                VariantAdapter(),
+                TranscriptAdapter(),
+                RegionAdapter(config),
+                FrequencyAdapter(snapshot, "test"),
+            ]
+        ),
+        computed_at=datetime(1970, 1, 1),
+    )
+    return next(iter(runner.run([variant]))).row
+
+
+def test_only_the_strongest_member_of_a_mutex_group_survives(
+    tmp_path, minus_gene, minus_config, toy_spec
+):
+    from vus_foresight.acmg import CriterionOutcome, SkipReason
+
+    spec = _spec_with_overlapping_frequency_rules(toy_spec)
+    row = _row_with_frequency(tmp_path, minus_gene, minus_config, spec, faf=0.005)
+
+    applied = {c.code for c in row.criteria_applied}
+    # Both rules are satisfied at this frequency; only the stand-alone one
+    # contributes points, or the same evidence would be counted twice.
+    assert "BA1" in applied
+    assert "BS1" not in applied
+    assert sum(c.points for c in row.criteria_applied if c.code == "BA1") == -8
+
+    superseded = next(s for s in row.criteria_evaluated_not_applied if s.code == "BS1")
+    assert superseded.outcome is CriterionOutcome.NOT_MET
+    assert superseded.reason is SkipReason.SUPERSEDED_BY_MUTEX
+
+
+def test_the_superseded_member_stays_in_the_trace(tmp_path, minus_gene, minus_config, toy_spec):
+    """Dropping it would make the trace claim the rule was never satisfied.
+
+    The trace is the product (spec section 1). A criterion that fired and was
+    then set aside by a mutex is a different fact from one that never fired,
+    and only the first tells a curator that the evidence exists.
+    """
+    spec = _spec_with_overlapping_frequency_rules(toy_spec)
+    row = _row_with_frequency(tmp_path, minus_gene, minus_config, spec, faf=0.005)
+
+    assert "BS1" in {s.code for s in row.criteria_evaluated_not_applied}
+
+
+def test_without_an_overlap_the_group_leaves_both_rules_alone(
+    tmp_path, minus_gene, minus_config, toy_spec
+):
+    """The shipped rules are disjoint, so nothing is superseded at any value."""
+    from vus_foresight.acmg import SkipReason
+
+    for faf in (0.005, 0.0005, 0.0):
+        row = _row_with_frequency(tmp_path, minus_gene, minus_config, toy_spec, faf=faf)
+        assert not [
+            s
+            for s in row.criteria_evaluated_not_applied
+            if s.reason is SkipReason.SUPERSEDED_BY_MUTEX
+        ], f"faf={faf} produced a mutex conflict the shipped rules should not have"

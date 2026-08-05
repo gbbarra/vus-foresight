@@ -237,3 +237,119 @@ def test_a_namespace_may_only_be_claimed_once():
     context.merge("frequency", {}, "a@1")
     with pytest.raises(ValueError, match="already populated"):
         context.merge("frequency", {}, "b@1")
+
+
+# --------------------------------------------------------------------------
+# The branches where PVS1 declines to reach a verdict.
+#
+# Every one of these is the difference between "no evidence" and "the tree
+# could not run", and the distinction has to survive into the trace: a
+# criterion requiring pvs1.strength reports NOT_EVALUABLE with the reason
+# attached rather than quietly failing to fire, which would silently remove
+# eight points from every truncating variant in the gene.
+# --------------------------------------------------------------------------
+
+
+def test_a_disabled_pvs1_says_so_instead_of_returning_no_strength(
+    minus_gene, minus_config, toy_spec
+):
+    """A specification that switches PVS1 off must be distinguishable from one
+    whose tree ran and declined."""
+    transcript = minus_gene.transcript
+    variant = next(
+        v
+        for codon in range(2, transcript.protein_length)
+        if (v := _nonsense_at(transcript, codon)) is not None
+    )
+    disabled = toy_spec.pvs1.model_copy(update={"enabled": False})
+
+    result = compute_pvs1(variant, transcript, minus_config, disabled, EvidenceContext())
+
+    assert result["applicable"] is False
+    assert result["undetermined_reason"] == "pvs1_disabled_in_spec"
+    assert "strength" not in result
+
+
+def test_a_non_truncating_consequence_is_declined_with_its_reason(
+    minus_gene, minus_config, toy_spec
+):
+    from vus_foresight.enumeration import enumerate_coding_snvs
+    from vus_foresight.variant import Consequence
+
+    transcript = minus_gene.transcript
+    missense = next(
+        v for v in enumerate_coding_snvs(transcript) if v.consequence is Consequence.MISSENSE
+    )
+
+    result = compute_pvs1(missense, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
+
+    assert result["applicable"] is False
+    assert result["undetermined_reason"] == "consequence_not_truncating"
+    assert "strength" not in result
+
+
+def test_a_truncating_variant_with_no_locatable_ptc_is_declined_not_assumed(
+    minus_gene, minus_config, toy_spec
+):
+    """Without a codon there is no NMD zone, so there is no tree to walk.
+
+    Guessing here would be the worst available option: the NMD boundary is what
+    separates very strong from strong, so a defaulted position would hand out
+    the strongest criterion in the system on no information.
+    """
+    from vus_foresight.variant import Consequence, Variant, VariantKind
+
+    transcript = minus_gene.transcript
+    homeless = Variant(
+        transcript=transcript.transcript_id,
+        gene=transcript.gene,
+        hgvs_c="c.100del",
+        hgvs_p=None,
+        consequence=Consequence.FRAMESHIFT,
+        kind=VariantKind.FRAMESHIFT_CLASS,
+        codon_index=None,
+        ptc_codon=None,
+    )
+
+    result = compute_pvs1(homeless, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
+
+    assert result["applicable"] is False
+    assert result["undetermined_reason"] == "ptc_position_unknown"
+    assert "strength" not in result
+
+
+def test_a_nonsense_variant_without_an_explicit_ptc_falls_back_to_its_own_codon(
+    minus_gene, minus_config, toy_spec
+):
+    """A nonsense variant *is* its PTC, so the tree can run without being told.
+
+    The enumerator already fills ptc_codon in, which is why this constructs the
+    variant by hand: the fallback exists for anything that reaches the tree
+    from another path, and an untested fallback in the NMD decision is a
+    silent route to the strongest criterion in the system.
+    """
+    from vus_foresight.variant import Consequence, Variant, VariantKind
+
+    transcript = minus_gene.transcript
+    enumerated = next(
+        v
+        for codon in range(2, transcript.protein_length)
+        if (v := _nonsense_at(transcript, codon)) is not None
+    )
+    assert enumerated.ptc_codon == enumerated.codon_index
+
+    without_ptc = Variant(
+        transcript=transcript.transcript_id,
+        gene=transcript.gene,
+        hgvs_c=enumerated.hgvs_c,
+        hgvs_p=enumerated.hgvs_p,
+        consequence=Consequence.NONSENSE,
+        kind=VariantKind.SNV,
+        codon_index=enumerated.codon_index,
+        ptc_codon=None,
+    )
+
+    result = compute_pvs1(without_ptc, transcript, minus_config, toy_spec.pvs1, EvidenceContext())
+
+    assert result["applicable"] is True
+    assert result["ptc_codon"] == enumerated.codon_index
