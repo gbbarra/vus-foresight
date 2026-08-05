@@ -16,17 +16,18 @@ Two rules keep it honest:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Iterator, Literal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .sequence import reverse_complement
 
 __all__ = [
-    "Exon",
     "CPosition",
+    "Exon",
     "IntronSpan",
     "Transcript",
     "format_c_position",
@@ -49,7 +50,7 @@ class Exon(BaseModel):
     end: int = Field(gt=0)
 
     @model_validator(mode="after")
-    def _ordered(self) -> "Exon":
+    def _ordered(self) -> Exon:
         if self.end < self.start:
             raise ValueError(f"exon {self.label}: end {self.end} < start {self.start}")
         return self
@@ -140,7 +141,7 @@ class Transcript(BaseModel):
     # validation
     # ------------------------------------------------------------------
     @model_validator(mode="after")
-    def _check(self) -> "Transcript":
+    def _check(self) -> Transcript:
         if len(self.exons) == 0:
             raise ValueError("transcript must have at least one exon")
 

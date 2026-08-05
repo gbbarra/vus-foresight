@@ -13,7 +13,6 @@ import pytest
 from vus_foresight.annotate.annotator import CodingEdit, annotate_coding_edits
 from vus_foresight.genome.sequence import reverse_complement, translate, translate_codon
 from vus_foresight.genome.transcript import CPosition, format_c_position
-from vus_foresight.variant import Consequence
 
 STRANDS = ("+", "-")
 

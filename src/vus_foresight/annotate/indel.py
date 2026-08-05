@@ -23,15 +23,15 @@ from . import hgvs
 from .annotator import CONSEQUENCE_RANK, genomic_deletion
 
 __all__ = [
+    "ProteinChange",
     "StopIndex",
+    "annotate_inframe_deletion",
     "build_stop_index",
+    "coding_and_utr3",
     "first_stop_index",
-    "ptc_after_indel",
     "normalize_deletion_3prime",
     "protein_change",
-    "ProteinChange",
-    "annotate_inframe_deletion",
-    "coding_and_utr3",
+    "ptc_after_indel",
 ]
 
 

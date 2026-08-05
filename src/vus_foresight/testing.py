@@ -27,15 +27,15 @@ from .genome.transcript import Exon, FlankSequences, Transcript
 from .variant import Variant
 
 __all__ = [
-    "SyntheticGene",
-    "build_synthetic_gene",
-    "synthetic_gene_config",
-    "build_demo_runner",
     "TOY_EXON_LENGTHS",
     "TOY_INTRON_LENGTHS",
-    "TOY_UTR5",
-    "TOY_UTR3",
     "TOY_PROTEIN_LENGTH",
+    "TOY_UTR3",
+    "TOY_UTR5",
+    "SyntheticGene",
+    "build_demo_runner",
+    "build_synthetic_gene",
+    "synthetic_gene_config",
 ]
 
 #: Transcript-order exon lengths, summing to the transcript length.

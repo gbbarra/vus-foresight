@@ -14,14 +14,15 @@ from __future__ import annotations
 import csv
 import gzip
 import re
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import IO, Iterable, Iterator
+from typing import IO
 
 from .clinvar import ClinVarRecord, normalise_classification, review_stars
 
-__all__ = ["ParseStats", "parse_variant_summary", "write_snapshot", "build_snapshot"]
+__all__ = ["ParseStats", "build_snapshot", "parse_variant_summary", "write_snapshot"]
 
 #: ``NM_007294.4(BRCA1):c.5074G>A (p.Asp1692Asn)`` -- the ``Name`` column.
 _NAME = re.compile(

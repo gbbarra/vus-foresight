@@ -18,16 +18,16 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
-    "Direction",
-    "Strength",
+    "DEFAULT_POINT_SYSTEM",
     "ACMGClass",
-    "EvidenceClass",
-    "FeasibilityTag",
     "BlockingReason",
     "CriterionOutcome",
-    "SkipReason",
+    "Direction",
+    "EvidenceClass",
+    "FeasibilityTag",
     "PointSystem",
-    "DEFAULT_POINT_SYSTEM",
+    "SkipReason",
+    "Strength",
 ]
 
 

@@ -24,12 +24,12 @@ from .acmg import (
 from .variant import Consequence, VariantKind
 
 __all__ = [
-    "AppliedCriterion",
-    "SkippedCriterion",
-    "EvidenceSet",
-    "EvidenceRequirement",
-    "GapMapRow",
     "GAP_MAP_COLUMNS",
+    "AppliedCriterion",
+    "EvidenceRequirement",
+    "EvidenceSet",
+    "GapMapRow",
+    "SkippedCriterion",
 ]
 
 

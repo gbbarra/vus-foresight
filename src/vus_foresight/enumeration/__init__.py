@@ -15,8 +15,8 @@ Explicitly out of scope, and not silently omitted:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from enum import Enum
-from typing import Iterator
 
 from ..genome.transcript import FlankSequences, Transcript
 from ..variant import Variant
@@ -40,9 +40,9 @@ from .snv import (
 )
 
 __all__ = [
-    "EnumerationClass",
     "INFRAME_DELETION_LENGTHS",
     "MNV_PER_CODON",
+    "EnumerationClass",
     "FrameshiftClass",
     "FrameshiftEnumeration",
     "MinimalIndel",

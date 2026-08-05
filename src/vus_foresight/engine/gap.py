@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from itertools import combinations
 
 from ..acmg import (
+    FEASIBILITY_COST,
     ACMGClass,
     BlockingReason,
     CriterionOutcome,
     Direction,
     EvidenceClass,
-    FEASIBILITY_COST,
     FeasibilityTag,
     SkipReason,
 )
@@ -30,11 +30,11 @@ from .spec import CriterionSpec, VCEPSpec
 __all__ = [
     "Candidate",
     "GapAnalysis",
+    "analyse_gap",
     "candidate_requirements",
+    "derive_blocking_reason",
     "intrinsic_ceiling",
     "minimum_sufficient_sets",
-    "derive_blocking_reason",
-    "analyse_gap",
 ]
 
 

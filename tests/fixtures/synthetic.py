@@ -5,7 +5,7 @@ command uses them too, and because the domain-isolation guarantee they
 demonstrate is a property of the library rather than of the test suite.
 """
 
-from vus_foresight.testing import (  # noqa: F401
+from vus_foresight.testing import (
     TOY_EXON_LENGTHS,
     TOY_INTRON_LENGTHS,
     TOY_PROTEIN_LENGTH,

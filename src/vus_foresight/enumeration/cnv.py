@@ -10,13 +10,13 @@ output schema.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 from ..annotate import hgvs
 from ..genome.transcript import Transcript
 from ..variant import Consequence, Variant, VariantKind
 
-__all__ = ["exon_interval_count", "enumerate_exon_cnvs"]
+__all__ = ["enumerate_exon_cnvs", "exon_interval_count"]
 
 
 def exon_interval_count(transcript: Transcript) -> int:
@@ -27,7 +27,7 @@ def exon_interval_count(transcript: Transcript) -> int:
 
 def _spanned_cds(transcript: Transcript, first: int, last: int) -> tuple[int, int] | None:
     """CDS positions covered by exons ``first..last`` (0-based, transcript order)."""
-    bounds = transcript._exon_tx_bounds  # noqa: SLF001 - same package, stable contract
+    bounds = transcript._exon_tx_bounds
     tx_start, tx_end = bounds[first][0], bounds[last][1]
     cds_lo = max(tx_start, transcript.cds_start_tx) - transcript.cds_start_tx + 1
     cds_hi = min(tx_end, transcript.cds_end_tx) - transcript.cds_start_tx + 1

@@ -20,19 +20,19 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from .transcript import Exon, FlankSequences, Transcript
 
 __all__ = [
+    "FunctionalRegion",
+    "GeneConfig",
     "ReferenceUnavailable",
     "SequenceResource",
     "TranscriptConfig",
-    "FunctionalRegion",
-    "GeneConfig",
-    "load_gene_config",
     "build_transcript",
     "load_flanks",
+    "load_gene_config",
     "read_fasta",
 ]
 
@@ -110,7 +110,7 @@ class TranscriptConfig(BaseModel):
     exons: tuple[Exon, ...] = ()
 
     @model_validator(mode="after")
-    def _consistent(self) -> "TranscriptConfig":
+    def _consistent(self) -> TranscriptConfig:
         if self.cds_start_tx is not None and self.cds_end_tx is not None:
             span = self.cds_end_tx - self.cds_start_tx + 1
             if self.cds_length != span:

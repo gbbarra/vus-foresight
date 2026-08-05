@@ -21,13 +21,14 @@ lose the distinction.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from hashlib import blake2b
-from typing import Any, Sequence
+from typing import Any
 
 from ..variant import Variant
 from .context import MISSING, EvidenceContext
 
-__all__ = ["canonical", "evidence_signature", "SignatureCache"]
+__all__ = ["SignatureCache", "canonical", "evidence_signature"]
 
 _MISSING_TOKEN = ("\x00missing",)
 

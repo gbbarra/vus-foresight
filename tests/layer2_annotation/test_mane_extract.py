@@ -16,9 +16,9 @@ import gzip
 
 import pytest
 
+from vus_foresight.genome.importer import import_reference
 from vus_foresight.genome.mane import extract_transcript, normalise_chrom
 from vus_foresight.genome.reference import ReferenceUnavailable, build_transcript, load_gene_config
-from vus_foresight.genome.importer import import_reference
 
 
 def _write_release(tmp_path, gene, config, *, gzipped=False, accession_seqname=False, decoys=2):

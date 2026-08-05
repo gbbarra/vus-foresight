@@ -6,7 +6,7 @@ holds no domain constant of its own. The test that keeps it that way lives in
 suite against a synthetic gene and a toy specification.
 """
 
-from .cnv_scoring import CNVScoringConfig, CNVScore, cnv_row, score_cnv
+from .cnv_scoring import CNVScore, CNVScoringConfig, cnv_row, score_cnv
 from .context import MISSING, EvidenceContext, LookupLog
 from .equivalence import equivalence_class_id, equivalence_key
 from .evaluator import Evaluation, evaluate_variant, render_evidence
@@ -17,6 +17,7 @@ from .pvs1 import compute_pvs1
 from .spec import CriterionSpec, PVS1Config, VCEPSpec, load_spec
 
 __all__ = [
+    "MISSING",
     "CNVScore",
     "CNVScoringConfig",
     "Candidate",
@@ -26,7 +27,6 @@ __all__ = [
     "GapAnalysis",
     "Leaf",
     "LookupLog",
-    "MISSING",
     "MapRunner",
     "PVS1Config",
     "RuleNode",

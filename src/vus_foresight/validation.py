@@ -21,10 +21,11 @@ This is a validation *study*, not a unit test. It runs on demand against
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Sequence
+from typing import TYPE_CHECKING
 
 from .acmg import ACMGClass, BlockingReason, EvidenceClass, FeasibilityTag
 from .gapmap import GapMapRow
@@ -35,19 +36,19 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     from .engine.timeline import TimelineDiff
 
 __all__ = [
-    "Outcome",
-    "ValidationResult",
-    "read_outcomes",
-    "outcomes_from_snapshots",
-    "observed_causes_from_diff",
-    "is_resolvable",
-    "predicted_direction",
-    "spearman",
-    "validate",
-    "run_time_series_study",
-    "TimeSeriesStudy",
     "CLINVAR_TO_ACMG",
     "NEIGHBOUR_CLASSIFICATION",
+    "Outcome",
+    "TimeSeriesStudy",
+    "ValidationResult",
+    "is_resolvable",
+    "observed_causes_from_diff",
+    "outcomes_from_snapshots",
+    "predicted_direction",
+    "read_outcomes",
+    "run_time_series_study",
+    "spearman",
+    "validate",
 ]
 
 #: ClinVar's normalised vocabulary mapped onto the five-tier terminology.
@@ -217,8 +218,8 @@ def read_outcomes(path: str | Path) -> list[Outcome]:
 
 
 def outcomes_from_snapshots(
-    before: "ClinVarSnapshot",
-    after: "ClinVarSnapshot",
+    before: ClinVarSnapshot,
+    after: ClinVarSnapshot,
     *,
     transcript_id: str,
     min_stars: int = 1,
@@ -260,7 +261,7 @@ def outcomes_from_snapshots(
     return outcomes
 
 
-def observed_causes_from_diff(diff: "TimelineDiff", spec: "VCEPSpec") -> dict[str, str]:
+def observed_causes_from_diff(diff: TimelineDiff, spec: VCEPSpec) -> dict[str, str]:
     """What kind of evidence actually turned up, per variant.
 
     Metric 2 asks whether the predicted ``blocking_reason`` matches the evidence
@@ -304,7 +305,7 @@ def observed_causes_from_diff(diff: "TimelineDiff", spec: "VCEPSpec") -> dict[st
     return causes
 
 
-def _observed_label(spec: "VCEPSpec", code: str) -> str | None:
+def _observed_label(spec: VCEPSpec, code: str) -> str | None:
     """What kind of evidence a newly-applied criterion represents."""
     try:
         criterion = spec.by_code(code)
@@ -553,9 +554,9 @@ class TimeSeriesStudy:
 def run_time_series_study(
     rows_at_t: Iterable[GapMapRow],
     rows_at_t_plus_n: Iterable[GapMapRow],
-    clinvar_at_t: "ClinVarSnapshot",
-    clinvar_at_t_plus_n: "ClinVarSnapshot",
-    spec: "VCEPSpec",
+    clinvar_at_t: ClinVarSnapshot,
+    clinvar_at_t_plus_n: ClinVarSnapshot,
+    spec: VCEPSpec,
     *,
     transcript_id: str,
     reference_date: date | None = None,

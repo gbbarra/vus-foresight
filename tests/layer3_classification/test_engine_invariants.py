@@ -7,7 +7,6 @@ assertions are about structure -- monotonicity, non-overestimation, exclusivity
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -20,11 +19,7 @@ from vus_foresight.acmg import (
     SkipReason,
     Strength,
 )
-from vus_foresight.engine.context import EvidenceContext
-from vus_foresight.engine.evaluator import evaluate_variant
-from vus_foresight.engine.gap import analyse_gap, minimum_sufficient_sets
 from vus_foresight.enumeration import enumerate_coding_snvs
-from vus_foresight.variant import Consequence
 
 CLASS_ORDER = {
     ACMGClass.BENIGN: 0,
@@ -102,8 +97,9 @@ def test_point_values_match_the_tavtigian_table():
 
 
 def _run(gene, config, spec, limit=60):
-    from vus_foresight.engine.pipeline import MapRunner, default_registry
     from datetime import datetime
+
+    from vus_foresight.engine.pipeline import MapRunner, default_registry
 
     runner = MapRunner(
         transcript=gene.transcript,

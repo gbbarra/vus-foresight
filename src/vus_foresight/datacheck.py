@@ -14,16 +14,16 @@ is honest.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 from .adapters.base import Adapter
 from .genome.reference import GeneConfig, ReferenceUnavailable
 from .genome.transcript import Transcript
 from .variant import Variant
 
-__all__ = ["SourceStatus", "DataReport", "check_reference", "check_sources"]
+__all__ = ["DataReport", "SourceStatus", "check_reference", "check_sources"]
 
 
 @dataclass(frozen=True, slots=True)

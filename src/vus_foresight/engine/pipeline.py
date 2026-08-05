@@ -11,9 +11,9 @@ sorted, and nothing iterates a set.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Iterable, Iterator
 
 from ..adapters.base import Adapter, AdapterRegistry
 from ..gapmap import GapMapRow

@@ -206,7 +206,6 @@ def test_the_pipeline_never_mixes_cnv_rows_into_the_point_scale(minus_gene, minu
     from datetime import datetime
 
     from vus_foresight.engine.pipeline import MapRunner, default_registry
-    from vus_foresight.variant import VariantKind
 
     runner = MapRunner(
         transcript=minus_gene.transcript,

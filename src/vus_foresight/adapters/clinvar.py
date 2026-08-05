@@ -26,10 +26,11 @@ looked up by a single key.
 from __future__ import annotations
 
 import csv
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from ..genome.transcript import Transcript
 from ..variant import Variant
@@ -41,8 +42,8 @@ __all__ = [
     "ClinVarSnapshot",
     "ClinVarSnapshotAdapter",
     "normalise_classification",
-    "review_stars",
     "protein_change_kind",
+    "review_stars",
 ]
 
 #: ClinVar's documented review-status strings, mapped to the star rating the
@@ -161,7 +162,7 @@ class ClinVarSnapshot:
     @classmethod
     def from_records(
         cls, records: Iterable[ClinVarRecord], snapshot_date: date | None = None
-    ) -> "ClinVarSnapshot":
+    ) -> ClinVarSnapshot:
         by_nucleotide: dict[str, ClinVarRecord] = {}
         by_protein: dict[str, list[ClinVarRecord]] = {}
         by_codon: dict[int, list[ClinVarRecord]] = {}
@@ -179,7 +180,7 @@ class ClinVarSnapshot:
         )
 
     @classmethod
-    def read(cls, path: str | Path, snapshot_date: date | None = None) -> "ClinVarSnapshot":
+    def read(cls, path: str | Path, snapshot_date: date | None = None) -> ClinVarSnapshot:
         """Read the normalised snapshot TSV written by ``clinvar build``.
 
         Columns: ``hgvs_c``, ``hgvs_p``, ``codon``, ``classification``,
@@ -291,7 +292,7 @@ class ClinVarSnapshotAdapter(Adapter):
         *,
         snapshot_date: date | None = None,
         min_stars: int = 1,
-    ) -> "ClinVarSnapshotAdapter":
+    ) -> ClinVarSnapshotAdapter:
         version = snapshot_date.isoformat() if snapshot_date else Path(path).stem
         return cls(ClinVarSnapshot.read(path, snapshot_date), version, min_stars=min_stars)
 

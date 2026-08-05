@@ -13,17 +13,17 @@ evidence moved it*, which is the difference between a changelog and a finding.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, Sequence
 
 from ..acmg import ACMGClass, BlockingReason, EvidenceClass
 from ..gapmap import GapMapRow
 
 __all__ = [
-    "TransitionCause",
-    "Transition",
     "TimelineDiff",
+    "Transition",
+    "TransitionCause",
     "compare_maps",
     "compare_series",
 ]
@@ -118,7 +118,7 @@ class _Before:
     applied: dict[str, tuple[str, EvidenceClass]]
 
     @classmethod
-    def of(cls, row: GapMapRow) -> "_Before":
+    def of(cls, row: GapMapRow) -> _Before:
         return cls(
             class_current=row.class_current,
             points_current=row.points_current,

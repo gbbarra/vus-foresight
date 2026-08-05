@@ -22,17 +22,17 @@ from __future__ import annotations
 from ..genome.sequence import three_letter
 
 __all__ = [
-    "format_substitution",
-    "format_delins",
     "format_deletion",
-    "format_protein_substitution",
-    "format_protein_synonymous",
-    "format_protein_start_lost",
-    "format_protein_stop_lost",
+    "format_delins",
+    "format_exon_cnv",
     "format_protein_deletion",
     "format_protein_delins",
     "format_protein_frameshift",
-    "format_exon_cnv",
+    "format_protein_start_lost",
+    "format_protein_stop_lost",
+    "format_protein_substitution",
+    "format_protein_synonymous",
+    "format_substitution",
 ]
 
 

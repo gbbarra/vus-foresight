@@ -13,13 +13,14 @@ never accidentally fire because data was not loaded.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Iterator
+from collections.abc import Callable, Iterator
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from .context import MISSING, EvidenceContext, LookupLog
 
-__all__ = ["Operator", "Leaf", "RuleNode", "evaluate_rule", "OPERATORS"]
+__all__ = ["OPERATORS", "Leaf", "Operator", "RuleNode", "evaluate_rule"]
 
 
 def _as_set(value: Any) -> set[Any]:
@@ -64,7 +65,7 @@ class Leaf(BaseModel):
     value: Any = None
 
     @model_validator(mode="after")
-    def _known_operator(self) -> "Leaf":
+    def _known_operator(self) -> Leaf:
         if self.op not in OPERATORS:
             raise ValueError(f"unknown operator {self.op!r}; available: {sorted(OPERATORS)}")
         return self
@@ -88,9 +89,9 @@ class RuleNode(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    all: tuple["RuleNode", ...] | None = None
-    any: tuple["RuleNode", ...] | None = None
-    none: tuple["RuleNode", ...] | None = None
+    all: tuple[RuleNode, ...] | None = None
+    any: tuple[RuleNode, ...] | None = None
+    none: tuple[RuleNode, ...] | None = None
     leaf: Leaf | None = None
 
     @model_validator(mode="before")
@@ -102,7 +103,7 @@ class RuleNode(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _exactly_one(self) -> "RuleNode":
+    def _exactly_one(self) -> RuleNode:
         set_fields = [
             name for name in ("all", "any", "none", "leaf") if getattr(self, name) is not None
         ]
@@ -112,7 +113,7 @@ class RuleNode(BaseModel):
             )
         return self
 
-    def iter_fields(self) -> "Iterator[str]":
+    def iter_fields(self) -> Iterator[str]:
         """Every context path this subtree can read.
 
         Used to compute a specification's field footprint, which is what makes

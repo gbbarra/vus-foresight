@@ -18,13 +18,13 @@ from ..variant import Consequence, Variant, VariantKind
 from . import hgvs
 
 __all__ = [
-    "CodingEdit",
     "CONSEQUENCE_RANK",
-    "most_severe",
+    "CodingEdit",
     "annotate_coding_edits",
     "annotate_intronic_substitution",
-    "genomic_vcf",
     "genomic_deletion",
+    "genomic_vcf",
+    "most_severe",
 ]
 
 

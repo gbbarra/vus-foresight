@@ -20,14 +20,15 @@ from __future__ import annotations
 
 import gzip
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import IO, Iterator
+from typing import IO
 
 from .reference import GeneConfig, ReferenceUnavailable
 from .transcript import Exon
 
-__all__ = ["ManeExtract", "extract_transcript", "open_maybe_gzip", "normalise_chrom"]
+__all__ = ["ManeExtract", "extract_transcript", "normalise_chrom", "open_maybe_gzip"]
 
 _ATTRIBUTE = re.compile(r'(\w+)\s+"([^"]*)"')
 

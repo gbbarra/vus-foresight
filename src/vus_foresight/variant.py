@@ -11,11 +11,11 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
-    "Consequence",
-    "VariantKind",
-    "Variant",
     "PROTEIN_TRUNCATING",
     "SPLICE_CONSEQUENCES",
+    "Consequence",
+    "Variant",
+    "VariantKind",
 ]
 
 

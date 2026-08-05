@@ -25,7 +25,7 @@ from ..variant import Variant
 from .evaluator import Evaluation
 from .spec import VCEPSpec
 
-__all__ = ["equivalence_key", "equivalence_class_id"]
+__all__ = ["equivalence_class_id", "equivalence_key"]
 
 
 def equivalence_key(variant: Variant, evaluation: Evaluation, spec: VCEPSpec) -> str:

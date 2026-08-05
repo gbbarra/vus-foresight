@@ -10,15 +10,15 @@ no standard annotator composes that correctly.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from itertools import product
-from typing import Iterator
 
 from ..annotate.annotator import CodingEdit, annotate_coding_edits
 from ..genome.sequence import BASES
 from ..genome.transcript import Transcript
 from ..variant import Variant, VariantKind
 
-__all__ = ["MNV_PER_CODON", "enumerate_intracodon_mnvs", "mnv_count", "alternative_codons"]
+__all__ = ["MNV_PER_CODON", "alternative_codons", "enumerate_intracodon_mnvs", "mnv_count"]
 
 #: 4**3 - 1 alternatives, minus the 3 x 3 single-nucleotide ones.
 MNV_PER_CODON = 54

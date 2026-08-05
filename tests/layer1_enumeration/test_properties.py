@@ -45,5 +45,5 @@ def test_every_cds_position_round_trips_through_the_transcript(cds_position):
 def test_codon_bounds_are_contiguous_and_in_range(codon_index):
     first, middle, last = TRANSCRIPT.codon_bounds_cds(codon_index)
     assert (first, middle, last) == (first, first + 1, first + 2)
-    assert 1 <= first and last <= TRANSCRIPT.cds_length
+    assert first >= 1 and last <= TRANSCRIPT.cds_length
     assert TRANSCRIPT.codon_sequence(codon_index) == TRANSCRIPT.cds[first - 1 : last]

@@ -16,7 +16,7 @@ from ..genome.transcript import Transcript
 from ..variant import Variant
 from .base import Adapter
 
-__all__ = ["VariantAdapter", "TranscriptAdapter", "RegionAdapter"]
+__all__ = ["RegionAdapter", "TranscriptAdapter", "VariantAdapter"]
 
 
 class VariantAdapter(Adapter):

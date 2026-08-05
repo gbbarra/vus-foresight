@@ -8,18 +8,17 @@ approximate.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
-from ..annotate.annotator import annotate_coding_edits, annotate_intronic_substitution
-from ..annotate.annotator import CodingEdit
+from ..annotate.annotator import CodingEdit, annotate_coding_edits, annotate_intronic_substitution
 from ..genome.sequence import alternatives
 from ..genome.transcript import FlankSequences, Transcript
 from ..variant import Variant
 
 __all__ = [
+    "coding_snv_count",
     "enumerate_coding_snvs",
     "enumerate_intronic_snvs",
-    "coding_snv_count",
     "intronic_snv_positions",
 ]
 

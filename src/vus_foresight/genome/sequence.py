@@ -10,15 +10,15 @@ a future gene needs an explicit decision.
 from __future__ import annotations
 
 __all__ = [
+    "AA_THREE_LETTER",
     "BASES",
     "CODON_TABLE",
-    "AA_THREE_LETTER",
+    "alternatives",
     "complement",
     "reverse_complement",
-    "translate_codon",
-    "translate",
-    "alternatives",
     "three_letter",
+    "translate",
+    "translate_codon",
 ]
 
 #: Canonical base ordering. Every enumeration that iterates alternative alleles

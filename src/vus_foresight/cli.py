@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -69,7 +69,7 @@ app.add_typer(data_app, name="data")
 #: Determinism: the default stamp is a fixed epoch, not the wall clock. A run
 #: that wants a real timestamp must say so, because two runs that differ only in
 #: their timestamp are not reproducible and the CI check would catch it as noise.
-FIXED_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc).replace(tzinfo=None)
+FIXED_EPOCH = datetime(1970, 1, 1, tzinfo=UTC).replace(tzinfo=None)
 
 
 def _load_reference(gene_path: Path, data_root: Path):

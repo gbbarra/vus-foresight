@@ -12,9 +12,10 @@ makes the golden-snapshot regression test of spec section 11 meaningful.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -38,12 +39,12 @@ TEMPLATE_TOKEN = re.compile(r"\{([A-Za-z0-9_.]+)\}")
 
 __all__ = [
     "TEMPLATE_TOKEN",
-    "StrengthRung",
-    "CriterionSpec",
-    "PVS1Config",
     "BlockingConfig",
+    "CriterionSpec",
     "EquivalenceConfig",
     "GapConfig",
+    "PVS1Config",
+    "StrengthRung",
     "VCEPSpec",
     "load_spec",
 ]
@@ -111,7 +112,7 @@ class CriterionSpec(BaseModel):
     notes: str | None = None
 
     @model_validator(mode="after")
-    def _coherent(self) -> "CriterionSpec":
+    def _coherent(self) -> CriterionSpec:
         if self.evidence_class is EvidenceClass.EXTRINSIC and self.rule is not None:
             raise ValueError(
                 f"{self.code}: extrinsic criteria must not carry a rule -- this system "
@@ -272,7 +273,7 @@ class VCEPSpec(BaseModel):
     criteria: tuple[CriterionSpec, ...]
 
     @model_validator(mode="after")
-    def _unique_codes(self) -> "VCEPSpec":
+    def _unique_codes(self) -> VCEPSpec:
         codes = [c.code for c in self.criteria]
         duplicates = sorted({c for c in codes if codes.count(c) > 1})
         if duplicates:

@@ -14,12 +14,13 @@ states, and :mod:`vus_foresight.engine.context` keeps them different.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 
 from ..genome.transcript import Transcript
 from ..variant import Variant
 
-__all__ = ["Adapter", "NullAdapter", "AdapterRegistry"]
+__all__ = ["Adapter", "AdapterRegistry", "NullAdapter"]
 
 
 class Adapter(ABC):

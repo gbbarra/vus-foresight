@@ -13,18 +13,19 @@ Two things distinguish it from a plain dict and both matter:
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from typing import Any
 
-__all__ = ["MISSING", "Missing", "EvidenceContext", "LookupLog"]
+__all__ = ["MISSING", "EvidenceContext", "LookupLog", "Missing"]
 
 
 class Missing:
     """Sentinel for an absent path. Distinct from ``None`` and from ``False``."""
 
-    _instance: "Missing | None" = None
+    _instance: Missing | None = None
 
-    def __new__(cls) -> "Missing":
+    def __new__(cls) -> Missing:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance

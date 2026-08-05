@@ -14,8 +14,9 @@ process in the loop.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Sequence
+from typing import Any
 
 import polars as pl
 
@@ -42,16 +43,16 @@ from .variant import Consequence, VariantKind
 __all__ = [
     "GAP_MAP_SCHEMA",
     "PARQUET_BATCH_SIZE",
-    "rows_to_frame",
-    "rows_from_frame",
-    "read_rows",
-    "iter_rows",
     "GapMapSource",
-    "write_parquet",
-    "read_parquet",
-    "blocking_summary",
     "available_uningested_report",
+    "blocking_summary",
     "equivalence_summary",
+    "iter_rows",
+    "read_parquet",
+    "read_rows",
+    "rows_from_frame",
+    "rows_to_frame",
+    "write_parquet",
 ]
 
 _APPLIED = pl.Struct(
@@ -255,7 +256,7 @@ def write_parquet(
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    writer: "pq.ParquetWriter | None" = None
+    writer: pq.ParquetWriter | None = None
     written = 0
     try:
         for batch in _batched(rows, batch_size):
@@ -401,7 +402,7 @@ class GapMapSource:
     cannot. This gives the repeatability without the memory.
     """
 
-    __slots__ = ("path", "batch_size")
+    __slots__ = ("batch_size", "path")
 
     def __init__(self, path: str | Path, *, batch_size: int = PARQUET_BATCH_SIZE) -> None:
         self.path = Path(path)

@@ -18,19 +18,20 @@ nothing.
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
 
 from ..genome.transcript import Transcript
 from ..variant import Variant
 from .base import Adapter
 
 __all__ = [
-    "TableAdapter",
     "FrequencyAdapter",
-    "PredictorAdapter",
     "FunctionalAdapter",
+    "PredictorAdapter",
     "SpliceAdapter",
+    "TableAdapter",
 ]
 
 

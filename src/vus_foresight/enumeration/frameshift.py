@@ -10,12 +10,11 @@ Volume collapses from "all indels" to one class per residue.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Iterator
 
 from ..annotate import hgvs
 from ..annotate.indel import (
-    StopIndex,
     build_stop_index,
     coding_and_utr3,
     normalize_deletion_3prime,
@@ -26,14 +25,14 @@ from ..genome.transcript import CPosition, Transcript, format_c_position
 from ..variant import Consequence, Variant, VariantKind
 
 __all__ = [
-    "MinimalIndel",
+    "MAX_REPRESENTATIVES",
     "FrameshiftClass",
     "FrameshiftEnumeration",
-    "normalize_insertion_3prime",
-    "enumerate_minimal_indels",
+    "MinimalIndel",
     "build_frameshift_classes",
     "enumerate_frameshift_classes",
-    "MAX_REPRESENTATIVES",
+    "enumerate_minimal_indels",
+    "normalize_insertion_3prime",
 ]
 
 #: How many member indels each class stores. The full membership is a set of

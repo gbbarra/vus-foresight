@@ -32,9 +32,9 @@ from .transcript import Exon
 
 __all__ = [
     "ImportedReference",
-    "read_exon_table",
-    "locate_cds",
     "import_reference",
+    "locate_cds",
+    "read_exon_table",
     "splice_derived",
 ]
 

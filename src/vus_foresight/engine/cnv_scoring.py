@@ -29,7 +29,7 @@ from ..genome.reference import GeneConfig
 from ..genome.transcript import Transcript
 from ..variant import Consequence, Variant, VariantKind
 
-__all__ = ["CNVScoringConfig", "CNVScore", "score_cnv", "cnv_row"]
+__all__ = ["CNVScore", "CNVScoringConfig", "cnv_row", "score_cnv"]
 
 #: The framework works in hundredths; the schema's integer point column stores
 #: score x 100 so that no floating point enters a reproducibility comparison.

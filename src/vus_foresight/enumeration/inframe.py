@@ -11,7 +11,7 @@ the emitted set is deduplicated by normalised HGVS.
 
 from __future__ import annotations
 
-from typing import Iterator
+from collections.abc import Iterator
 
 from ..annotate.indel import annotate_inframe_deletion
 from ..genome.transcript import Transcript
