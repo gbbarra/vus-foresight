@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -736,9 +737,18 @@ def timeline_command(
 
     parsed: list[tuple[str, Path]] = []
     for entry in snapshots:
-        if "=" not in entry:
-            raise typer.BadParameter(f"expected 'label=path', got {entry!r}")
-        label, path = entry.split("=", 1)
+        label, _, path = entry.partition("=")
+        # The label is checked for looking like a path, not merely for
+        # existing. The map writes its output to a Hive-style directory --
+        # out/<date>/gene=BRCA1/gap_map.parquet -- so a path passed without a
+        # label still contains an '=' and still splits, into a nonsense pair
+        # whose only symptom is a FileNotFoundError about half a path.
+        if not path or not label or "/" in label or os.sep in label:
+            raise typer.BadParameter(
+                f"expected 'label=path', got {entry!r}. Note that a map's own "
+                "output path contains an '=' (gene=BRCA1), so passing one "
+                "without a label prefix reads as a label."
+            )
         parsed.append((label, Path(path)))
     if len(parsed) < 2:
         raise typer.BadParameter("a timeline needs at least two snapshots")
